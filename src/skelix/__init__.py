@@ -1,3 +1,4 @@
+from .ik import InverseKinematicsResult, estimate_bone_scales_from_joints, estimate_rotations_from_joints, shortest_arc_rotation
 from .losses import ForwardKinematicsLoss
 from .model import SkeletalModel
 from .models import (
@@ -67,8 +68,15 @@ __all__ = [
     'pose_repr_size',
     'to_rotation_matrix',
     'axis_angle_to_matrix',
+    'matrix_to_axis_angle',
+    'matrix_to_rot6d',
     'quaternion_to_matrix',
     'rot6d_to_matrix',
+    'rotation_geodesic_distance',
+    'InverseKinematicsResult',
+    'estimate_bone_scales_from_joints',
+    'estimate_rotations_from_joints',
+    'shortest_arc_rotation',
 ]
 
 __version__ = '0.1.0'
