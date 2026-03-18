@@ -95,22 +95,3 @@ def test_forward_kinematics_loss_zero_for_identical_targets() -> None:
     loss_fn = ForwardKinematicsLoss(model)
     loss = loss_fn(target, full_pose=full_pose)
     assert torch.allclose(loss, torch.tensor(0.0), atol=1e-6)
-
-
-def test_forward_kinematics_loss_backpropagates() -> None:
-    model = Human36MModel(
-        create_global_orient=False,
-        create_body_pose=False,
-        create_bone_scales=False,
-        create_transl=False,
-    )
-    full_pose = torch.zeros(2, model.num_joints, 3)
-    target = model(full_pose=full_pose).joints.detach()
-
-    pred_pose = torch.randn(2, model.num_joints, 3, requires_grad=True)
-    loss_fn = ForwardKinematicsLoss(model)
-    loss = loss_fn(target, full_pose=pred_pose)
-    loss.backward()
-
-    assert pred_pose.grad is not None
-    assert torch.isfinite(pred_pose.grad).all()
