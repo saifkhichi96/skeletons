@@ -40,6 +40,8 @@ def main() -> None:
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch-size', type=int, default=128)
     parser.add_argument('--latent-dim', type=int, default=32)
+    parser.add_argument('--hidden-dim', type=int, default=512)
+    parser.add_argument('--num-hidden-layers', type=int, default=2)
     parser.add_argument('--output', type=Path, default=Path('outputs'))
     args = parser.parse_args()
 
@@ -51,7 +53,12 @@ def main() -> None:
     joint_limit_trainer = JointLimitTrainer(model=model)
     joint_limit_prior = joint_limit_trainer.fit_from_loader(loader)
 
-    vae = PoseVAE(num_joints=model.num_joints - 1, latent_dim=args.latent_dim)
+    vae = PoseVAE(
+        num_joints=model.num_joints - 1,
+        latent_dim=args.latent_dim,
+        hidden_dim=args.hidden_dim,
+        num_hidden_layers=args.num_hidden_layers,
+    )
     trainer = PoseVAETrainer(vae, model=model)
     for epoch in range(args.epochs):
         state = trainer.train_epoch(loader)
@@ -63,8 +70,18 @@ def main() -> None:
 
     torch.save(
         {
+            'format_version': 1,
             'skeleton': model.spec.name,
+            'pose_prior_config': {
+                'num_joints': model.num_joints - 1,
+                'latent_dim': args.latent_dim,
+                'hidden_dim': args.hidden_dim,
+                'num_hidden_layers': args.num_hidden_layers,
+            },
             'pose_prior': vae.state_dict(),
+            'joint_limit_prior_config': {
+                'barrier_scale': joint_limit_prior.barrier_scale,
+            },
             'joint_limit_prior': joint_limit_prior.state_dict(),
         },
         args.output / f'{model.spec.name}_priors.pt',
