@@ -348,46 +348,37 @@ class SkeletalModel(nn.Module):
             transl_value = self._reshape_translation(transl).to(dtype=dtype, device=device)
             transl_value = _expand_to_batch(transl_value, batch_shape, tail_dims=1)
 
-        joints = torch.zeros(batch_shape + (self.num_joints, 3), dtype=dtype, device=device)
-        global_rotations = torch.zeros(batch_shape + (self.num_joints, 3, 3), dtype=dtype, device=device)
-        local_transforms = None
-        global_transforms = None
-
-        if return_local_transforms:
-            local_transforms = torch.zeros(batch_shape + (self.num_joints, 4, 4), dtype=dtype, device=device)
-        if return_global_transforms:
-            global_transforms = torch.zeros(batch_shape + (self.num_joints, 4, 4), dtype=dtype, device=device)
+        joint_positions: list[torch.Tensor | None] = [None] * self.num_joints
+        global_rotation_list: list[torch.Tensor | None] = [None] * self.num_joints
+        local_transform_list: list[torch.Tensor | None] | None = [None] * self.num_joints if return_local_transforms else None
+        global_transform_list: list[torch.Tensor | None] | None = [None] * self.num_joints if return_global_transforms else None
 
         for joint_idx in self.topological_order:
             parent_idx = self.parents[joint_idx]
+            local_rotation = local_rotations[..., joint_idx, :, :]
             if parent_idx == -1:
-                joints[..., joint_idx, :] = transl_value
-                global_rotations[..., joint_idx, :, :] = local_rotations[..., joint_idx, :, :]
-                if return_local_transforms:
-                    local_transforms[..., joint_idx, :, :] = _make_transform(
-                        local_rotations[..., joint_idx, :, :], transl_value
-                    )
-                if return_global_transforms:
-                    global_transforms[..., joint_idx, :, :] = _make_transform(
-                        global_rotations[..., joint_idx, :, :], joints[..., joint_idx, :]
-                    )
-                continue
+                position = transl_value
+                global_rotation = local_rotation
+            else:
+                parent_rot = global_rotation_list[parent_idx]
+                parent_pos = joint_positions[parent_idx]
+                assert parent_rot is not None and parent_pos is not None
+                joint_offset = scaled_offsets[..., joint_idx, :]
+                offset_world = (parent_rot @ joint_offset.unsqueeze(-1)).squeeze(-1)
+                position = parent_pos + offset_world
+                global_rotation = parent_rot @ local_rotation
 
-            # Clone parent views before writing subsequent joints so autograd
-            # does not see later in-place updates to the backing tensors.
-            parent_rot = global_rotations[..., parent_idx, :, :].clone()
-            parent_pos = joints[..., parent_idx, :].clone()
-            joint_offset = scaled_offsets[..., joint_idx, :]
-            offset_world = (parent_rot @ joint_offset.unsqueeze(-1)).squeeze(-1)
-            joints[..., joint_idx, :] = parent_pos + offset_world
-            global_rotations[..., joint_idx, :, :] = parent_rot @ local_rotations[..., joint_idx, :, :]
+            joint_positions[joint_idx] = position
+            global_rotation_list[joint_idx] = global_rotation
 
-            if return_local_transforms:
-                local_transforms[..., joint_idx, :, :] = _make_transform(local_rotations[..., joint_idx, :, :], joint_offset)
-            if return_global_transforms:
-                global_transforms[..., joint_idx, :, :] = _make_transform(
-                    global_rotations[..., joint_idx, :, :], joints[..., joint_idx, :]
-                )
+            if local_transform_list is not None:
+                local_translation = transl_value if parent_idx == -1 else scaled_offsets[..., joint_idx, :]
+                local_transform_list[joint_idx] = _make_transform(local_rotation, local_translation)
+            if global_transform_list is not None:
+                global_transform_list[joint_idx] = _make_transform(global_rotation, position)
+
+        joints = torch.stack([value for value in joint_positions if value is not None], dim=-2)
+        global_rotations = torch.stack([value for value in global_rotation_list if value is not None], dim=-3)
 
         output = {
             'joints': joints,
@@ -396,10 +387,10 @@ class SkeletalModel(nn.Module):
             'bone_scales': bone_scales_full,
             'transl': transl_value,
         }
-        if local_transforms is not None:
-            output['local_transforms'] = local_transforms
-        if global_transforms is not None:
-            output['global_transforms'] = global_transforms
+        if local_transform_list is not None:
+            output['local_transforms'] = torch.stack([value for value in local_transform_list if value is not None], dim=-3)
+        if global_transform_list is not None:
+            output['global_transforms'] = torch.stack([value for value in global_transform_list if value is not None], dim=-3)
         return output
 
     def forward(
