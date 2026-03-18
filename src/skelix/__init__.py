@@ -79,4 +79,4 @@ __all__ = [
     'shortest_arc_rotation',
 ]
 
-__version__ = '0.1.0'
+__version__ = '0.2.0'

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skelix"
-version = "0.1.0"
+version = "0.2.0"
 description = "Differentiable skeletal kinematic models for pose, animation, and FK-based learning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,7 +24,8 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-  "torch>=2.1"
+  "torch>=2.1",
+  "numpy>=1.24"
 ]
 
 [project.optional-dependencies]
