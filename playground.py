@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import sys
 from collections import OrderedDict
@@ -54,7 +55,7 @@ SKELETON_FACTORIES = OrderedDict(
 )
 
 BONE_COLOR = (0.93, 0.91, 0.82, 1.0)
-JOINT_COLOR = (0.65, 0.69, 0.74, 1.0)
+JOINT_COLOR = (0.05, 0.69, 0.04, 1.0)
 ROOT_COLOR = (0.61, 0.73, 0.60, 1.0)
 SELECTED_COLOR = (0.89, 0.77, 0.49, 1.0)
 AXIS_COLORS = {
@@ -70,6 +71,10 @@ SCENE_TO_VIEW = np.array(
     ],
     dtype=float,
 )
+
+
+def _normalize_skeleton_name(name: str) -> str:
+    return name.lower().replace('-', '_')
 
 
 def vec3_to_numpy(value) -> np.ndarray:
@@ -118,6 +123,26 @@ class AnimationPreset:
     generator: Callable[[object, float], tuple[torch.Tensor, torch.Tensor]]
 
 
+@dataclass
+class AxisRomLimit:
+    enabled: bool = False
+    minimum_deg: float = -180.0
+    maximum_deg: float = 180.0
+
+
+AXIS_NAMES = ("X", "Y", "Z")
+AXIS_FILE_KEYS = ("x", "y", "z")
+
+
+def _animation_model(source) -> object:
+    return getattr(source, "model", source)
+
+
+def _stable_phase_seed(text: str) -> float:
+    total = sum((index + 1) * ord(char) for index, char in enumerate(text))
+    return math.radians(float(total % 360))
+
+
 def _has_joints(model, *joint_names: str) -> bool:
     available = set(model.joint_names)
     return all(name in available for name in joint_names)
@@ -150,7 +175,8 @@ def _make_animation_buffers(model) -> tuple[torch.Tensor, torch.Tensor]:
     )
 
 
-def generate_root_sway(model, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_root_sway(source, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+    model = _animation_model(source)
     phase = (2.0 * math.pi * time_s) / 2.8
     pose, translation = _make_animation_buffers(model)
     root = model.root_index
@@ -163,7 +189,8 @@ def generate_root_sway(model, time_s: float) -> tuple[torch.Tensor, torch.Tensor
     return pose, translation
 
 
-def generate_walk_cycle(model, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_walk_cycle(source, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+    model = _animation_model(source)
     phase = (2.0 * math.pi * time_s) / 1.25
     pose, translation = _make_animation_buffers(model)
 
@@ -194,7 +221,8 @@ def generate_walk_cycle(model, time_s: float) -> tuple[torch.Tensor, torch.Tenso
     return pose, translation
 
 
-def generate_arm_wave(model, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_arm_wave(source, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+    model = _animation_model(source)
     phase = (2.0 * math.pi * time_s) / 1.6
     pose, translation = _make_animation_buffers(model)
     _set_axis_angle(pose, model, "right_shoulder", (-0.25, 0.0, -0.95))
@@ -207,7 +235,8 @@ def generate_arm_wave(model, time_s: float) -> tuple[torch.Tensor, torch.Tensor]
     return pose, translation
 
 
-def generate_finger_wave(model, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_finger_wave(source, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+    model = _animation_model(source)
     phase = (2.0 * math.pi * time_s) / 1.8
     pose, translation = _make_animation_buffers(model)
     finger_groups = [
@@ -231,7 +260,48 @@ def generate_finger_wave(model, time_s: float) -> tuple[torch.Tensor, torch.Tens
     return pose, translation
 
 
+def generate_rom_wander(source, time_s: float) -> tuple[torch.Tensor, torch.Tensor]:
+    model = _animation_model(source)
+    pose, translation = _make_animation_buffers(model)
+    rom_limits = getattr(source, "rom_limits", {})
+
+    for joint_index, joint_name in enumerate(model.joint_names):
+        limits = rom_limits.get(joint_name)
+        if limits is None:
+            continue
+
+        for axis, limit in enumerate(limits):
+            if not limit.enabled:
+                continue
+            center_deg = (limit.minimum_deg + limit.maximum_deg) * 0.5
+            amplitude_deg = max(limit.maximum_deg - limit.minimum_deg, 0.0) * 0.5
+            if amplitude_deg <= 1e-4:
+                pose[joint_index, axis] = math.radians(center_deg)
+                continue
+
+            phase_seed = _stable_phase_seed(f"{joint_name}:{axis}")
+            primary_frequency = 0.10 + 0.02 * ((joint_index + axis) % 7)
+            secondary_frequency = primary_frequency * (1.7 + 0.15 * ((joint_index + axis) % 3))
+            waveform = (
+                math.sin(2.0 * math.pi * primary_frequency * time_s + phase_seed)
+                + 0.35 * math.sin(2.0 * math.pi * secondary_frequency * time_s + phase_seed * 0.6)
+            ) / 1.35
+            pose[joint_index, axis] = math.radians(center_deg + amplitude_deg * waveform)
+
+    if getattr(source, "model", None) is not None:
+        translation[1] = 0.02 * math.sin(2.0 * math.pi * time_s * 0.24)
+        translation[2] = 0.03 * math.cos(2.0 * math.pi * time_s * 0.17)
+    return pose, translation
+
+
 ANIMATION_PRESETS = (
+    AnimationPreset(
+        key="rom_wander",
+        label="ROM Wander",
+        period=8.0,
+        matcher=lambda model: True,
+        generator=generate_rom_wander,
+    ),
     AnimationPreset(
         key="root_sway",
         label="Root Sway",
@@ -318,6 +388,12 @@ class FloatSlider(QtWidgets.QWidget):
         self.slider.setValue(raw)
         self.slider.blockSignals(was_blocked)
         self.value_label.setText(self._format(clamped))
+
+    def set_range(self, minimum: float, maximum: float) -> None:
+        self.minimum = minimum
+        self.maximum = maximum
+        self.slider.setRange(int(round(minimum * self.factor)), int(round(maximum * self.factor)))
+        self.set_value(self.value(), emit=False)
 
     def _format(self, value: float) -> str:
         return f"{value:.{self.decimals}f}{self.suffix}"
@@ -462,6 +538,8 @@ class SkeletonViewport(gl.GLViewWidget):
     CAMERA_DISTANCE = 4.4
     CAMERA_AZIMUTH = -36.0
     GIZMO_MARGIN = 18
+    GRID_SIZE = 8.0
+    GRID_SPACING = 0.25
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent=parent)
@@ -479,8 +557,8 @@ class SkeletonViewport(gl.GLViewWidget):
         )
 
         self.grid = gl.GLGridItem()
-        self.grid.setSize(2.0, 2.0, 1.0)
-        self.grid.setSpacing(0.2, 0.2, 0.2)
+        self.grid.setSize(self.GRID_SIZE, self.GRID_SIZE, 1.0)
+        self.grid.setSpacing(self.GRID_SPACING, self.GRID_SPACING, self.GRID_SPACING)
         self.addItem(self.grid)
 
         self.bone_mesh = create_bone_pyramid_mesh()
@@ -540,26 +618,26 @@ class SkeletonViewport(gl.GLViewWidget):
         maxs = render_joints.max(axis=0)
         extent = float(np.max(maxs - mins))
         extent = max(extent, 0.35)
-        bone_radius = max(extent * 0.015, 0.003)
-        joint_radius = max(extent * 0.018, 0.004)
-        grid_size = max(extent * 2.4, 1.2)
-        grid_spacing = max(grid_size / 12.0, 0.05)
-        ground_height = float(mins[2])
-        horizontal_center = (mins[:2] + maxs[:2]) * 0.5
+        min_bone_radius = max(extent * 0.006, 0.0025)
+        max_bone_radius = max(extent * 0.028, min_bone_radius * 1.8)
+        min_joint_radius = max(extent * 0.0055, 0.0022)
 
-        self.grid.resetTransform()
-        self.grid.setSize(grid_size, grid_size, 1.0)
-        self.grid.setSpacing(grid_spacing, grid_spacing, grid_spacing)
-        self.grid.translate(
-            float(horizontal_center[0]),
-            float(horizontal_center[1]),
-            ground_height,
-            local=False,
-        )
+        bone_radii = np.full(len(self.parents), min_bone_radius, dtype=float)
+        joint_radii = np.full(len(self.parents), min_joint_radius, dtype=float)
+        for joint_index, parent_index in enumerate(self.parents):
+            if parent_index < 0:
+                continue
+            segment_length = float(np.linalg.norm(render_joints[joint_index] - render_joints[parent_index]))
+            segment_radius = float(np.clip(segment_length * 0.12, min_bone_radius, max_bone_radius))
+            bone_radii[joint_index] = segment_radius
+            joint_radius = max(segment_radius * 0.90, min_joint_radius)
+            joint_radii[joint_index] = max(joint_radii[joint_index], joint_radius)
+            joint_radii[parent_index] = max(joint_radii[parent_index], joint_radius)
 
         for joint_index, item in enumerate(self.joint_items):
             item.resetTransform()
-            item.scale(joint_radius, joint_radius, joint_radius)
+            radius = float(joint_radii[joint_index])
+            item.scale(radius, radius, radius)
             item.translate(*map(float, render_joints[joint_index]), local=False)
 
             if joint_index == selected_joint:
@@ -582,7 +660,7 @@ class SkeletonViewport(gl.GLViewWidget):
                 item,
                 render_joints[parent_index],
                 render_joints[joint_index],
-                bone_radius=bone_radius,
+                bone_radius=float(bone_radii[joint_index]),
                 color=SELECTED_COLOR if highlight else BONE_COLOR,
             )
         self.gizmo.update()
@@ -698,6 +776,8 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.full_pose = torch.zeros(1, 3)
         self.translation = torch.zeros(3)
         self.bone_scales = torch.ones(1)
+        self.global_bone_scale = 1.0
+        self.rom_limits: dict[str, list[AxisRomLimit]] = {}
         self.scale_joint_indices: list[int] = []
         self.animation_timer = QtCore.QTimer(self)
         self.animation_timer.setInterval(int(round(self.ANIMATION_DT * 1000)))
@@ -797,7 +877,10 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
         animation_group = QtWidgets.QGroupBox("Animation")
         animation_layout = QtWidgets.QVBoxLayout(animation_group)
-        animation_note = QtWidgets.QLabel("Preset motion is added on top of the current slider pose.")
+        animation_note = QtWidgets.QLabel(
+            "Preset motion is added on top of the current slider pose. "
+            "ROM Wander uses the active joint limits as a plausible motion envelope."
+        )
         animation_note.setWordWrap(True)
         animation_note.setStyleSheet("color: #9fb0c0;")
         animation_layout.addWidget(animation_note)
@@ -845,10 +928,11 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         pose_layout.addWidget(pose_note)
         self.pose_joint_combo = QtWidgets.QComboBox()
         self.pose_joint_combo.currentIndexChanged.connect(self._sync_pose_sliders)
+        self.pose_joint_combo.currentIndexChanged.connect(self._sync_rom_controls)
         self.pose_joint_combo.currentIndexChanged.connect(self._refresh_view)
         pose_layout.addWidget(self.pose_joint_combo)
         self.pose_sliders: list[FloatSlider] = []
-        for axis_name in ("X", "Y", "Z"):
+        for axis_name in AXIS_NAMES:
             slider = FloatSlider(
                 f"{axis_name} rotation",
                 minimum=-180.0,
@@ -865,10 +949,78 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         pose_layout.addWidget(self.zero_joint_button)
         sidebar_layout.addWidget(pose_group)
 
+        rom_group = QtWidgets.QGroupBox("ROM Limits")
+        rom_layout = QtWidgets.QVBoxLayout(rom_group)
+        rom_note = QtWidgets.QLabel(
+            "Enable per-axis biomechanical limits for the selected joint. "
+            "The pose sliders and animations are clamped to these ranges."
+        )
+        rom_note.setWordWrap(True)
+        rom_note.setStyleSheet("color: #9fb0c0;")
+        rom_layout.addWidget(rom_note)
+
+        rom_grid = QtWidgets.QGridLayout()
+        rom_grid.setHorizontalSpacing(8)
+        rom_grid.setVerticalSpacing(6)
+        rom_grid.addWidget(QtWidgets.QLabel("Axis"), 0, 0)
+        rom_grid.addWidget(QtWidgets.QLabel("Lock"), 0, 1)
+        rom_grid.addWidget(QtWidgets.QLabel("Min"), 0, 2)
+        rom_grid.addWidget(QtWidgets.QLabel("Max"), 0, 3)
+
+        self.rom_enable_checks: list[QtWidgets.QCheckBox] = []
+        self.rom_min_spins: list[QtWidgets.QDoubleSpinBox] = []
+        self.rom_max_spins: list[QtWidgets.QDoubleSpinBox] = []
+        for axis, axis_name in enumerate(AXIS_NAMES):
+            axis_label = QtWidgets.QLabel(axis_name)
+            rom_grid.addWidget(axis_label, axis + 1, 0)
+
+            enable_check = QtWidgets.QCheckBox()
+            enable_check.toggled.connect(self._on_rom_limit_changed)
+            rom_grid.addWidget(enable_check, axis + 1, 1, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+            self.rom_enable_checks.append(enable_check)
+
+            min_spin = QtWidgets.QDoubleSpinBox()
+            min_spin.setRange(-180.0, 180.0)
+            min_spin.setDecimals(1)
+            min_spin.setSingleStep(1.0)
+            min_spin.setSuffix(" deg")
+            min_spin.valueChanged.connect(self._on_rom_limit_changed)
+            rom_grid.addWidget(min_spin, axis + 1, 2)
+            self.rom_min_spins.append(min_spin)
+
+            max_spin = QtWidgets.QDoubleSpinBox()
+            max_spin.setRange(-180.0, 180.0)
+            max_spin.setDecimals(1)
+            max_spin.setSingleStep(1.0)
+            max_spin.setSuffix(" deg")
+            max_spin.valueChanged.connect(self._on_rom_limit_changed)
+            rom_grid.addWidget(max_spin, axis + 1, 3)
+            self.rom_max_spins.append(max_spin)
+        rom_layout.addLayout(rom_grid)
+
+        rom_button_row = QtWidgets.QHBoxLayout()
+        self.reset_joint_rom_button = QtWidgets.QPushButton("Reset Joint ROM")
+        self.reset_joint_rom_button.clicked.connect(self._reset_selected_joint_rom)
+        self.clear_all_rom_button = QtWidgets.QPushButton("Clear All ROM")
+        self.clear_all_rom_button.clicked.connect(self._clear_all_rom)
+        rom_button_row.addWidget(self.reset_joint_rom_button)
+        rom_button_row.addWidget(self.clear_all_rom_button)
+        rom_layout.addLayout(rom_button_row)
+
+        rom_io_row = QtWidgets.QHBoxLayout()
+        self.load_rom_button = QtWidgets.QPushButton("Load ROM…")
+        self.load_rom_button.clicked.connect(self._load_rom_limits_from_file)
+        self.save_rom_button = QtWidgets.QPushButton("Save ROM…")
+        self.save_rom_button.clicked.connect(self._save_rom_limits_to_file)
+        rom_io_row.addWidget(self.load_rom_button)
+        rom_io_row.addWidget(self.save_rom_button)
+        rom_layout.addLayout(rom_io_row)
+        sidebar_layout.addWidget(rom_group)
+
         translation_group = QtWidgets.QGroupBox("Translation")
         translation_layout = QtWidgets.QVBoxLayout(translation_group)
         self.translation_sliders: list[FloatSlider] = []
-        for axis_name in ("X", "Y", "Z"):
+        for axis_name in AXIS_NAMES:
             slider = FloatSlider(
                 f"{axis_name} offset",
                 minimum=-2.0,
@@ -884,10 +1036,23 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
         scale_group = QtWidgets.QGroupBox("Bone Scale")
         scale_layout = QtWidgets.QVBoxLayout(scale_group)
-        scale_note = QtWidgets.QLabel("Scale the segment ending at the selected joint.")
+        scale_note = QtWidgets.QLabel(
+            "Global scale multiplies the whole skeleton. "
+            "Local scale adjusts the segment ending at the selected joint."
+        )
         scale_note.setWordWrap(True)
         scale_note.setStyleSheet("color: #9fb0c0;")
         scale_layout.addWidget(scale_note)
+        self.global_scale_slider = FloatSlider(
+            "Global scale",
+            minimum=0.25,
+            maximum=2.50,
+            factor=100,
+            decimals=2,
+            suffix="x",
+        )
+        self.global_scale_slider.value_changed.connect(self._on_global_scale_changed)
+        scale_layout.addWidget(self.global_scale_slider)
         self.scale_joint_combo = QtWidgets.QComboBox()
         self.scale_joint_combo.currentIndexChanged.connect(self._sync_scale_slider)
         scale_layout.addWidget(self.scale_joint_combo)
@@ -916,6 +1081,183 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         sidebar_layout.addLayout(button_row)
         sidebar_layout.addStretch(1)
 
+    def _default_rom_limits(self) -> dict[str, list[AxisRomLimit]]:
+        return {
+            joint_name: [AxisRomLimit() for _ in range(3)]
+            for joint_name in self.model.joint_names
+        }
+
+    def _rom_limits_for_joint(self, joint_index: int) -> list[AxisRomLimit]:
+        if joint_index < 0:
+            return [AxisRomLimit() for _ in range(3)]
+        return self.rom_limits[self.model.joint_names[joint_index]]
+
+    def _clamp_angle_to_rom_limit(self, joint_index: int, axis: int, value_rad: float) -> float:
+        limit = self._rom_limits_for_joint(joint_index)[axis]
+        if not limit.enabled:
+            return value_rad
+        minimum = math.radians(limit.minimum_deg)
+        maximum = math.radians(limit.maximum_deg)
+        return min(max(value_rad, minimum), maximum)
+
+    def _clamp_pose_to_rom_limits(self, pose: torch.Tensor) -> torch.Tensor:
+        clamped = pose.clone()
+        for joint_index, joint_name in enumerate(self.model.joint_names):
+            limits = self.rom_limits.get(joint_name)
+            if limits is None:
+                continue
+            for axis, limit in enumerate(limits):
+                if not limit.enabled:
+                    continue
+                clamped[joint_index, axis] = self._clamp_angle_to_rom_limit(
+                    joint_index,
+                    axis,
+                    float(clamped[joint_index, axis]),
+                )
+        return clamped
+
+    def _clamp_full_pose_in_place(self) -> None:
+        self.full_pose = self._clamp_pose_to_rom_limits(self.full_pose)
+
+    def _update_pose_slider_ranges(self) -> None:
+        joint_index = self.pose_joint_combo.currentIndex()
+        if joint_index < 0:
+            return
+
+        self._clamp_full_pose_in_place()
+        limits = self._rom_limits_for_joint(joint_index)
+        for axis, slider in enumerate(self.pose_sliders):
+            limit = limits[axis]
+            if limit.enabled:
+                slider.set_range(limit.minimum_deg, limit.maximum_deg)
+            else:
+                slider.set_range(-180.0, 180.0)
+
+    def _sync_rom_controls(self, *_args) -> None:
+        joint_index = self.pose_joint_combo.currentIndex()
+        if joint_index < 0:
+            return
+        self._update_pose_slider_ranges()
+        limits = self._rom_limits_for_joint(joint_index)
+        for axis, limit in enumerate(limits):
+            widgets = (
+                self.rom_enable_checks[axis],
+                self.rom_min_spins[axis],
+                self.rom_max_spins[axis],
+            )
+            for widget in widgets:
+                was_blocked = widget.blockSignals(True)
+                if isinstance(widget, QtWidgets.QCheckBox):
+                    widget.setChecked(limit.enabled)
+                elif widget is self.rom_min_spins[axis]:
+                    widget.setValue(limit.minimum_deg)
+                else:
+                    widget.setValue(limit.maximum_deg)
+                widget.blockSignals(was_blocked)
+            self.rom_min_spins[axis].setEnabled(limit.enabled)
+            self.rom_max_spins[axis].setEnabled(limit.enabled)
+
+    def _status_message(self, message: str, timeout_ms: int = 4000) -> None:
+        self.statusBar().showMessage(message, timeout_ms)
+
+    def _default_rom_path(self) -> Path:
+        return Path(__file__).resolve().parent / "rom_limits" / f"{self.model.spec.name}.json"
+
+    def _serialize_rom_limits(self) -> dict[str, object]:
+        payload: dict[str, object] = {}
+        for joint_name, limits in self.rom_limits.items():
+            joint_payload: dict[str, object] = {}
+            for axis_key, limit in zip(AXIS_FILE_KEYS, limits):
+                if not limit.enabled:
+                    continue
+                joint_payload[axis_key] = {
+                    "enabled": True,
+                    "min_deg": limit.minimum_deg,
+                    "max_deg": limit.maximum_deg,
+                }
+            if joint_payload:
+                payload[joint_name] = joint_payload
+        return {
+            "format_version": 1,
+            "skeleton": self.model.spec.name,
+            "joint_limits": payload,
+        }
+
+    def _apply_rom_payload(self, payload: dict[str, object]) -> None:
+        skeleton_name = payload.get("skeleton")
+        if skeleton_name is not None and _normalize_skeleton_name(str(skeleton_name)) != _normalize_skeleton_name(self.model.spec.name):
+            raise ValueError(
+                f"ROM file skeleton {skeleton_name!r} does not match current skeleton {self.model.spec.name!r}.",
+            )
+
+        rom_limits = self._default_rom_limits()
+        joint_payload = payload.get("joint_limits", {})
+        if not isinstance(joint_payload, dict):
+            raise ValueError("ROM file must contain a 'joint_limits' object.")
+
+        for joint_name, axis_payload in joint_payload.items():
+            if joint_name not in rom_limits or not isinstance(axis_payload, dict):
+                continue
+            for axis, axis_key in enumerate(AXIS_FILE_KEYS):
+                if axis_key not in axis_payload:
+                    continue
+                limit_payload = axis_payload[axis_key]
+                if not isinstance(limit_payload, dict):
+                    continue
+                minimum_deg = float(limit_payload.get("min_deg", limit_payload.get("minimum_deg", -180.0)))
+                maximum_deg = float(limit_payload.get("max_deg", limit_payload.get("maximum_deg", 180.0)))
+                if minimum_deg > maximum_deg:
+                    minimum_deg, maximum_deg = maximum_deg, minimum_deg
+                rom_limits[joint_name][axis] = AxisRomLimit(
+                    enabled=bool(limit_payload.get("enabled", True)),
+                    minimum_deg=minimum_deg,
+                    maximum_deg=maximum_deg,
+                )
+        self.rom_limits = rom_limits
+        self._clamp_full_pose_in_place()
+        self._sync_rom_controls()
+        self._sync_pose_sliders()
+        self._refresh_view()
+
+    def _save_rom_limits_to_file(self, *_args) -> None:
+        default_path = self._default_rom_path()
+        default_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Save ROM Limits",
+            str(default_path),
+            "JSON Files (*.json)",
+        )
+        if not file_path:
+            return
+        path = Path(file_path)
+        if path.suffix.lower() != ".json":
+            path = path.with_suffix(".json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self._serialize_rom_limits(), indent=2), encoding="utf-8")
+        self._status_message(f"Saved ROM limits to {path.name}")
+
+    def _load_rom_limits_from_file(self, *_args) -> None:
+        default_path = self._default_rom_path()
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Load ROM Limits",
+            str(default_path),
+            "JSON Files (*.json)",
+        )
+        if not file_path:
+            return
+        path = Path(file_path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("ROM file must contain a JSON object.")
+            self._apply_rom_payload(payload)
+        except Exception as exc:  # pragma: no cover - GUI error reporting
+            QtWidgets.QMessageBox.warning(self, "Load ROM Limits", str(exc))
+            return
+        self._status_message(f"Loaded ROM limits from {path.name}")
+
     def _load_skeleton(self, display_name: str) -> None:
         model_cls = SKELETON_FACTORIES[display_name]
         self.model = model_cls(
@@ -928,6 +1270,8 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.full_pose = torch.zeros(self.model.num_joints, 3, dtype=dtype)
         self.translation = torch.zeros(3, dtype=dtype)
         self.bone_scales = torch.ones(self.model.num_joints, dtype=dtype)
+        self.global_bone_scale = 1.0
+        self.rom_limits = self._default_rom_limits()
         self.scale_joint_indices = list(self.model.non_root_joint_indices)
         self.animation_time = 0.0
         self.animation_timer.stop()
@@ -942,8 +1286,10 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._populate_animation_selectors()
         self._populate_joint_selectors()
         self._sync_pose_sliders()
+        self._sync_rom_controls()
         self._sync_translation_sliders()
         self._sync_scale_slider()
+        self._sync_global_scale_slider()
         self._sync_animation_phase_slider()
         self._update_animation_controls()
         self._refresh_view(fit_camera=True)
@@ -986,7 +1332,12 @@ class SkelixPlayground(QtWidgets.QMainWindow):
     def _make_pose_callback(self, axis: int):
         def callback(value: float) -> None:
             joint_index = self.pose_joint_combo.currentIndex()
-            self.full_pose[joint_index, axis] = math.radians(value)
+            self.full_pose[joint_index, axis] = self._clamp_angle_to_rom_limit(
+                joint_index,
+                axis,
+                math.radians(value),
+            )
+            self._sync_pose_sliders()
             self._refresh_view()
 
         return callback
@@ -1071,6 +1422,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         joint_index = self.pose_joint_combo.currentIndex()
         if joint_index < 0:
             return
+        self._update_pose_slider_ranges()
         values_deg = [math.degrees(float(v)) for v in self.full_pose[joint_index]]
         for axis, slider in enumerate(self.pose_sliders):
             slider.set_value(values_deg[axis], emit=False)
@@ -1086,6 +1438,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         joint_index = self.scale_joint_indices[selection]
         self.scale_slider.set_value(float(self.bone_scales[joint_index]), emit=False)
 
+    def _sync_global_scale_slider(self) -> None:
+        self.global_scale_slider.set_value(self.global_bone_scale, emit=False)
+
     def _selected_pose_joint(self) -> int:
         return self.pose_joint_combo.currentIndex()
 
@@ -1100,8 +1455,54 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         if joint_index < 0:
             return
         self.full_pose[joint_index].zero_()
+        self._clamp_full_pose_in_place()
         self._sync_pose_sliders()
         self._refresh_view()
+
+    def _on_rom_limit_changed(self, *_args) -> None:
+        joint_index = self._selected_pose_joint()
+        if joint_index < 0:
+            return
+
+        joint_name = self.model.joint_names[joint_index]
+        for axis in range(3):
+            enabled = self.rom_enable_checks[axis].isChecked()
+            minimum_deg = float(self.rom_min_spins[axis].value())
+            maximum_deg = float(self.rom_max_spins[axis].value())
+            if minimum_deg > maximum_deg:
+                if self.sender() is self.rom_min_spins[axis]:
+                    maximum_deg = minimum_deg
+                else:
+                    minimum_deg = maximum_deg
+            self.rom_limits[joint_name][axis] = AxisRomLimit(
+                enabled=enabled,
+                minimum_deg=minimum_deg,
+                maximum_deg=maximum_deg,
+            )
+            self.rom_min_spins[axis].setEnabled(enabled)
+            self.rom_max_spins[axis].setEnabled(enabled)
+
+        self._clamp_full_pose_in_place()
+        self._sync_rom_controls()
+        self._sync_pose_sliders()
+        self._refresh_view()
+
+    def _reset_selected_joint_rom(self, *_args) -> None:
+        joint_index = self._selected_pose_joint()
+        if joint_index < 0:
+            return
+        self.rom_limits[self.model.joint_names[joint_index]] = [AxisRomLimit() for _ in range(3)]
+        self._sync_rom_controls()
+        self._sync_pose_sliders()
+        self._refresh_view()
+        self._status_message(f"Cleared ROM limits for {self.model.joint_names[joint_index]}")
+
+    def _clear_all_rom(self, *_args) -> None:
+        self.rom_limits = self._default_rom_limits()
+        self._sync_rom_controls()
+        self._sync_pose_sliders()
+        self._refresh_view()
+        self._status_message("Cleared all ROM limits")
 
     def _reset_selected_bone(self, *_args) -> None:
         joint_index = self._selected_scale_joint()
@@ -1113,16 +1514,22 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.full_pose.zero_()
         self.translation.zero_()
         self.bone_scales.fill_(1.0)
+        self.global_bone_scale = 1.0
         self.animation_time = 0.0
         self._sync_pose_sliders()
         self._sync_translation_sliders()
         self._sync_scale_slider()
+        self._sync_global_scale_slider()
         self._sync_animation_phase_slider()
         self._refresh_view(fit_camera=True)
 
     def _on_scale_changed(self, value: float) -> None:
         joint_index = self._selected_scale_joint()
         self.bone_scales[joint_index] = value
+        self._refresh_view()
+
+    def _on_global_scale_changed(self, value: float) -> None:
+        self.global_bone_scale = value
         self._refresh_view()
 
     def _fit_camera(self, *_args) -> None:
@@ -1134,10 +1541,10 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         translation = self.translation.clone()
         preset = self._active_animation()
         if preset is None:
-            return pose, translation
+            return self._clamp_pose_to_rom_limits(pose), translation
 
-        pose_delta, translation_delta = preset.generator(self.model, self.animation_time)
-        pose = pose + pose_delta
+        pose_delta, translation_delta = preset.generator(self, self.animation_time)
+        pose = self._clamp_pose_to_rom_limits(pose + pose_delta)
         translation = translation + translation_delta
         return pose, translation
 
@@ -1146,7 +1553,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         with torch.no_grad():
             output = self.model(
                 full_pose=pose,
-                bone_scales=self.bone_scales,
+                bone_scales=self.bone_scales * self.global_bone_scale,
                 transl=translation,
             )
         return output.joints.detach().cpu().numpy()
