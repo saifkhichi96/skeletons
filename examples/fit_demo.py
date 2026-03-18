@@ -5,7 +5,7 @@ from pathlib import Path
 
 import torch
 
-from skelix.fitting import FrameDataset, PerspectiveCamera, SkeletalFitter
+from skelix.fitting import FrameDataset, JointLimitPrior, JointLimitStatistics, PerspectiveCamera, PoseVAE, SkeletalFitter
 from skelix.models import create_model
 
 SUPPORTED_SKELETONS = (
@@ -19,6 +19,79 @@ SUPPORTED_SKELETONS = (
     'coco_wholebody',
     'spinetrack',
 )
+
+
+def _normalize_skeleton_name(name: str) -> str:
+    return name.lower().replace('-', '_')
+
+
+def _infer_pose_prior_config(state_dict: dict[str, torch.Tensor]) -> dict[str, int]:
+    linear_keys = sorted(
+        key
+        for key, value in state_dict.items()
+        if key.startswith('encoder.')
+        and key.endswith('.weight')
+        and value.ndim == 2
+    )
+    if not linear_keys:
+        raise ValueError('Could not infer PoseVAE architecture from the checkpoint.')
+    input_dim = int(state_dict[linear_keys[0]].shape[1])
+    hidden_dim = int(state_dict[linear_keys[0]].shape[0])
+    latent_dim = int(state_dict['encoder_mu.weight'].shape[0])
+    if input_dim % 6 != 0:
+        raise ValueError(f'PoseVAE input dimension must be divisible by 6, got {input_dim}.')
+    return {
+        'num_joints': input_dim // 6,
+        'latent_dim': latent_dim,
+        'hidden_dim': hidden_dim,
+        'num_hidden_layers': len(linear_keys),
+    }
+
+
+def _load_priors(
+    path: Path,
+    *,
+    skeleton: str,
+) -> tuple[PoseVAE | None, JointLimitPrior | None]:
+    checkpoint = torch.load(path, map_location='cpu')
+    if not isinstance(checkpoint, dict):
+        raise ValueError(f'Expected a dict checkpoint in {path}, got {type(checkpoint).__name__}.')
+
+    checkpoint_skeleton = checkpoint.get('skeleton')
+    if checkpoint_skeleton is not None and _normalize_skeleton_name(str(checkpoint_skeleton)) != _normalize_skeleton_name(skeleton):
+        raise ValueError(
+            f'Prior checkpoint skeleton {checkpoint_skeleton!r} does not match requested skeleton {skeleton!r}.',
+        )
+
+    pose_prior = None
+    pose_state = checkpoint.get('pose_prior')
+    if pose_state is not None:
+        pose_config = checkpoint.get('pose_prior_config')
+        if pose_config is None:
+            pose_config = _infer_pose_prior_config(pose_state)
+        pose_prior = PoseVAE(**pose_config)
+        pose_prior.load_state_dict(pose_state)
+        pose_prior.eval()
+
+    joint_limit_prior = None
+    joint_limit_state = checkpoint.get('joint_limit_prior')
+    if joint_limit_state is not None:
+        joint_limit_config = checkpoint.get('joint_limit_prior_config', {})
+        joint_limit_prior = JointLimitPrior(
+            JointLimitStatistics(
+                mean=joint_limit_state['mean'],
+                std=joint_limit_state['std'],
+                lower=joint_limit_state['lower'],
+                upper=joint_limit_state['upper'],
+            ),
+            barrier_scale=float(joint_limit_config.get('barrier_scale', 10.0)),
+        )
+        joint_limit_prior.load_state_dict(joint_limit_state)
+        joint_limit_prior.eval()
+
+    if pose_prior is None and joint_limit_prior is None:
+        raise ValueError(f'No supported priors were found in {path}.')
+    return pose_prior, joint_limit_prior
 
 
 def main() -> None:
@@ -38,12 +111,26 @@ def main() -> None:
     )
     parser.add_argument('--mode', choices=('2d', '3d'), default='3d')
     parser.add_argument('--sample-index', type=int, default=0)
+    parser.add_argument(
+        '--priors',
+        type=Path,
+        default=None,
+        help='Optional path to a prior checkpoint saved by train_prior.py.',
+    )
     args = parser.parse_args()
 
     model = create_model(args.skeleton, create_global_orient=False, create_body_pose=False)
     dataset = FrameDataset.from_npz(args.dataset, expected_num_joints=model.num_joints)
     sample = dataset[args.sample_index]
-    fitter = SkeletalFitter(model=model)
+    pose_prior = None
+    joint_limit_prior = None
+    if args.priors is not None:
+        pose_prior, joint_limit_prior = _load_priors(args.priors, skeleton=model.spec.name)
+    fitter = SkeletalFitter(
+        model=model,
+        pose_prior=pose_prior,
+        joint_limit_prior=joint_limit_prior,
+    )
 
     if args.mode == '3d':
         result = fitter.fit_3d(sample['joints_3d'].unsqueeze(0), num_iters=200)
