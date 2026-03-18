@@ -15,10 +15,13 @@ from .models import (
 from .output import SkeletalOutput
 from .rotations import (
     axis_angle_to_matrix,
+    matrix_to_axis_angle,
+    matrix_to_rot6d,
     normalize_pose_repr,
     pose_repr_size,
     quaternion_to_matrix,
     rot6d_to_matrix,
+    rotation_geodesic_distance,
     to_rotation_matrix,
 )
 from .specs import (

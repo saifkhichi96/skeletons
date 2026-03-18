@@ -87,6 +87,29 @@ def axis_angle_to_matrix(axis_angle: torch.Tensor) -> torch.Tensor:
     return torch.where(small, first_order, rot)
 
 
+def matrix_to_axis_angle(matrix: torch.Tensor) -> torch.Tensor:
+    if matrix.shape[-2:] != (3, 3):
+        raise ValueError(f'Rotation matrix input must end in (3, 3), got {tuple(matrix.shape)}.')
+
+    trace = matrix[..., 0, 0] + matrix[..., 1, 1] + matrix[..., 2, 2]
+    cos_theta = ((trace - 1.0) * 0.5).clamp(-1.0, 1.0)
+    theta = torch.acos(cos_theta)
+
+    rx = matrix[..., 2, 1] - matrix[..., 1, 2]
+    ry = matrix[..., 0, 2] - matrix[..., 2, 0]
+    rz = matrix[..., 1, 0] - matrix[..., 0, 1]
+    axis_unnorm = torch.stack([rx, ry, rz], dim=-1)
+
+    sin_theta = torch.sin(theta)
+    axis = axis_unnorm / (2.0 * sin_theta.unsqueeze(-1) + 1e-8)
+    axis_angle = axis * theta.unsqueeze(-1)
+
+    small = theta < 1e-5
+    first_order = 0.5 * axis_unnorm
+    axis_angle = torch.where(small.unsqueeze(-1), first_order, axis_angle)
+    return axis_angle
+
+
 def quaternion_to_matrix(quat: torch.Tensor) -> torch.Tensor:
     if quat.shape[-1] != 4:
         raise ValueError(f'Quaternion input must end in 4, got {tuple(quat.shape)}.')
@@ -132,6 +155,34 @@ def rot6d_to_matrix(rot6d: torch.Tensor) -> torch.Tensor:
     b2 = F.normalize(a2 - proj * b1, dim=-1)
     b3 = torch.cross(b1, b2, dim=-1)
     return torch.stack([b1, b2, b3], dim=-1)
+
+
+def matrix_to_rot6d(matrix: torch.Tensor) -> torch.Tensor:
+    if matrix.shape[-2:] != (3, 3):
+        raise ValueError(f'Rotation matrix input must end in (3, 3), got {tuple(matrix.shape)}.')
+    first_two_columns = matrix[..., :, :2]
+    return first_two_columns.transpose(-2, -1).reshape(matrix.shape[:-2] + (6,))
+
+
+def rotation_geodesic_distance(
+    rotation_a: torch.Tensor,
+    rotation_b: torch.Tensor,
+    *,
+    reduction: str = 'none',
+) -> torch.Tensor:
+    if rotation_a.shape[-2:] != (3, 3) or rotation_b.shape[-2:] != (3, 3):
+        raise ValueError('rotation_a and rotation_b must end in (3, 3).')
+    relative = rotation_a.transpose(-2, -1) @ rotation_b
+    trace = relative[..., 0, 0] + relative[..., 1, 1] + relative[..., 2, 2]
+    cosine = ((trace - 1.0) * 0.5).clamp(-1.0, 1.0)
+    angle = torch.acos(cosine)
+    if reduction == 'mean':
+        return angle.mean()
+    if reduction == 'sum':
+        return angle.sum()
+    if reduction != 'none':
+        raise ValueError("reduction must be 'none', 'mean', or 'sum'.")
+    return angle
 
 
 def to_rotation_matrix(pose: torch.Tensor, pose_repr: str) -> torch.Tensor:
