@@ -23,7 +23,7 @@ class _SpecBackedModel(SkeletalModel):
 
     def __init__(self, *args, dtype: torch.dtype = torch.float32, **kwargs) -> None:
         if self.SPEC_FACTORY is None:
-            raise RuntimeError('SPEC_FACTORY must be defined on subclasses.')
+            raise RuntimeError("SPEC_FACTORY must be defined on subclasses.")
         spec: SkeletonSpec = self.SPEC_FACTORY(dtype=dtype)
         super().__init__(spec, *args, dtype=dtype, **kwargs)
 
@@ -64,6 +64,8 @@ class SpineTrackModel(_SpecBackedModel):
     SPEC_FACTORY = staticmethod(spinetrack_spec)
 
 
-def create_model(name: str, *args, dtype: torch.dtype = torch.float32, **kwargs) -> SkeletalModel:
+def create_model(
+    name: str, *args, dtype: torch.dtype = torch.float32, **kwargs
+) -> SkeletalModel:
     spec = get_spec(name, dtype=dtype)
     return SkeletalModel(spec, *args, dtype=dtype, **kwargs)

@@ -7,9 +7,11 @@ from .model import SkeletalModel
 
 
 class ForwardKinematicsLoss(nn.Module):
-    def __init__(self, model: SkeletalModel, *, p: int = 2, reduction: str = 'mean') -> None:
+    def __init__(
+        self, model: SkeletalModel, *, p: int = 2, reduction: str = "mean"
+    ) -> None:
         super().__init__()
-        if reduction not in {'none', 'mean', 'sum'}:
+        if reduction not in {"none", "mean", "sum"}:
             raise ValueError("reduction must be 'none', 'mean', or 'sum'.")
         self.model = model
         self.p = p
@@ -37,8 +39,8 @@ class ForwardKinematicsLoss(nn.Module):
         loss = torch.linalg.vector_norm(diff, ord=self.p, dim=-1)
         if weights is not None:
             loss = loss * weights
-        if self.reduction == 'mean':
+        if self.reduction == "mean":
             return loss.mean()
-        if self.reduction == 'sum':
+        if self.reduction == "sum":
             return loss.sum()
         return loss

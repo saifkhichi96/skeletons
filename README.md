@@ -1,6 +1,6 @@
-# skelix
+# DifferentialSkeletons
 
-`skelix` is a lightweight PyTorch package for differentiable skeletal kinematics. It is intended for use cases that need a reusable articulated-body module without a skinned surface model: FK-based losses, pose regularization, skeleton retargeting, canonical rest-pose animation, and optimization over bone-length multipliers.
+A lightweight PyTorch package for differentiable skeletal kinematics. It is intended for use cases that need a reusable articulated-body module without a skinned surface model: FK-based losses, pose regularization, skeleton retargeting, canonical rest-pose animation, optimization over OpenSim-style body scale factors, and skeleton-native prior learning.
 
 The public API is deliberately close to the interaction style of `smplx`: models can own default parameters (`global_orient`, `body_pose`, `bone_scales`, `transl`) but explicit per-call tensors always override the stored state.
 
@@ -9,7 +9,7 @@ The public API is deliberately close to the interaction style of `smplx`: models
 - A generic `SkeletalModel` base class with differentiable forward kinematics.
 - Split-pose and full-pose inputs.
 - Axis-angle, quaternion, 6D, and rotation-matrix pose representations.
-- Optional learnable or frozen per-bone length multipliers.
+- Optional learnable or frozen OpenSim-style per-body scale factors.
 - Canonical template rigs for:
   - COCO
   - MPII
@@ -21,11 +21,17 @@ The public API is deliberately close to the interaction style of `smplx`: models
   - COCO WholeBody
   - SpineTrack
 - A simple `ForwardKinematicsLoss` module.
+- Generic inverse-kinematics helpers for recovering local rotations from 3D joint trajectories.
+- A concrete Human3.6M prior-learning and fitting stack:
+  - empirical joint-limit prior
+  - VAE body-pose prior in rotation-6D space
+  - GRU temporal prior
+  - single-frame and sequence fitting from 3D or 2D joints
 
 ## Installation
 
 ```bash
-pip install skelix
+pip install differential_skeletons
 ```
 
 For editable development:
@@ -38,9 +44,9 @@ pip install -e .[dev]
 
 ```python
 import torch
-from skelix import Human36MModel
+import differential_skeletons as ds
 
-model = Human36MModel(
+model = ds.Human36MModel(
     create_global_orient=False,
     create_body_pose=False,
     create_bone_scales=False,
@@ -64,113 +70,47 @@ print(out.joints.shape)           # [B, J, 3]
 print(out.global_rotations.shape) # [B, J, 3, 3]
 ```
 
-## Using a fixed morphology
+## H36M prior learning and fitting
 
 ```python
 import torch
-from skelix import Halpe26Model
-
-model = Halpe26Model(
-    create_bone_scales=True,
-    bone_scales=torch.ones(25),
-    learn_bone_scales=False,
+from differential_skeletons.h36m import (
+    H36MPoseVAE,
+    H36MJointLimitTrainer,
+    H36MFitter,
+    PerspectiveCamera,
 )
 
-model.freeze("bone_scales")
+joints_3d = torch.randn(32, 17, 3)
+prior = H36MPoseVAE(num_joints=16, latent_dim=32)
+limits = H36MJointLimitTrainer().fit_from_joints(joints_3d)
+fitter = H36MFitter(pose_prior=prior, joint_limit_prior=limits)
+
+camera = PerspectiveCamera(
+    fx=torch.tensor(1000.0),
+    fy=torch.tensor(1000.0),
+    cx=torch.tensor(512.0),
+    cy=torch.tensor(512.0),
+)
 ```
 
-## Using a full pose tensor
-
-This is often more convenient when the root joint is not the first joint in the dataset ordering.
-
-```python
-import torch
-from skelix import Face68Model
-
-model = Face68Model(create_global_orient=False, create_body_pose=False)
-full_pose = torch.zeros(model.num_joints, 3)
-out = model(full_pose=full_pose, return_full_pose=True)
-```
+The Human3.6M stack expects dataset-style arrays with the official 17-joint ordering and can be driven either from raw tensors or from `.npz` files loaded by `H36MFrameDataset` / `H36MSequenceDataset`.
 
 ## Notes on the canonical rest pose
 
-`skelix` does **not** ship learned dataset-specific body shapes. The provided `rest_offsets` are canonical template offsets designed to be useful and stable in practice:
+`differential_skeletons` does **not** ship learned dataset-specific body shapes. The provided `rest_offsets` are canonical template offsets designed to be useful and stable in practice:
 
 - Full-body rigs use a neutral adult T-pose.
 - Hand rigs use an open-hand neutral pose.
 - Face rigs use a neutral frontal landmark template.
-- `bone_scales` are multiplicative per-bone length factors, not SMPL-style latent shape coefficients.
+- `bone_scales` follow an OpenSim-like body-scaling convention: each body can carry an isotropic scalar or an anisotropic `x/y/z` scale, and child joint offsets are scaled in the parent body's local frame.
+- Passing `[..., J - 1]` or `[..., J]` scale tensors remains supported as isotropic shorthand; passing `[..., J - 1, 3]` or `[..., J, 3]` enables explicit per-axis body scaling.
 
 This makes the package suitable for FK losses and optimization, but the templates should be treated as canonical priors rather than dataset ground truth.
 
-## Notes on hierarchy choices
+## Important note on H36M pose priors
 
-Some datasets do not define a clean articulated tree on their own. In those cases `skelix` uses a documented kinematic proxy:
-
-- COCO and COCO WholeBody are rooted at the **nose**, because those keypoint sets do not provide an explicit pelvis or neck root.
-- Face68 is implemented as a pseudo-kinematic tree following the standard 68-point ordering.
-- SpineTrack includes a few torso landmarks that are not fully specified as a tree in the metainfo; those are attached through a canonical spine-and-clavicle hierarchy.
-
-## API summary
-
-### Base model
-
-```python
-from skelix import SkeletalModel
-```
-
-### Concrete models
-
-```python
-from skelix import (
-    CocoModel,
-    MPIIModel,
-    Human36MModel,
-    Halpe26Model,
-    Hand21Model,
-    Face68Model,
-    HalpeFullBodyModel,
-    CocoWholeBodyModel,
-    SpineTrackModel,
-)
-```
-
-### Forward signature
-
-```python
-output = model(
-    global_orient=None,
-    body_pose=None,
-    full_pose=None,
-    bone_scales=None,
-    transl=None,
-    pose_repr=None,
-    return_full_pose=False,
-    return_local_rotations=False,
-    return_global_rotations=False,
-    return_local_transforms=False,
-    return_global_transforms=False,
-    return_scaled_offsets=False,
-    return_dict=False,
-)
-```
-
-### Output fields
-
-`SkeletalOutput` provides:
-
-- `joints`
-- `full_pose`
-- `global_orient`
-- `body_pose`
-- `bone_scales`
-- `transl`
-- `scaled_offsets`
-- `local_rotations`
-- `global_rotations`
-- `local_transforms`
-- `global_transforms`
-- `joint_names`
+Human3.6M keypoints constrain articulated pose well enough for skeleton-native priors and fitting, but they do not uniquely identify arbitrary twist about each bone axis. The provided inverse-kinematics preparation therefore estimates observable joint orientation from outgoing child vectors and resolves underdetermined twist with a minimal-twist convention. The H36M prior stack is therefore best understood as a prior over **observable skeletal articulation** rather than a full anatomical DOF model.
 
 ## Attribution
 
