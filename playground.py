@@ -10,33 +10,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
+import pyqtgraph as pg
+import pyqtgraph.opengl as gl
+import torch
+from PySide6 import QtCore, QtGui, QtWidgets
+
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-try:
-    import numpy as np
-    import pyqtgraph as pg
-    import pyqtgraph.opengl as gl
-    import torch
-    from PySide6 import QtCore, QtGui, QtWidgets
-except (ImportError, ModuleNotFoundError) as exc:
-    raise SystemExit(
-        "Missing app dependencies. Install them with `pip install 'PyOpenGL>=3.1' 'pyqtgraph>=0.13' 'PySide6>=6.7'`, "
-        "then run `python playground.py`."
-    ) from exc
-
 from differential_skeletons import (
-    CocoModel,
-    CocoWholeBodyModel,
-    Face68Model,
-    Halpe26Model,
-    HalpeFullBodyModel,
-    Hand21Model,
-    Human36MModel,
-    MPIIModel,
-    SpineTrackModel,
+    SUPPORTED_SKELETONS,
+    build_layer,
+    create,
 )
 from differential_skeletons.fitting import (
     FrameDataset,
@@ -110,19 +98,25 @@ def softlight_shader() -> gl.shaders.ShaderProgram:
     )
 
 
-SKELETON_FACTORIES = OrderedDict(
+SKELETON_DISPLAY_NAMES = OrderedDict(
     [
-        ("COCO", CocoModel),
-        ("MPII", MPIIModel),
-        ("Human3.6M", Human36MModel),
-        ("HALPE26", Halpe26Model),
-        ("Hand21", Hand21Model),
-        ("Face68", Face68Model),
-        ("HALPE FullBody", HalpeFullBodyModel),
-        ("COCO WholeBody", CocoWholeBodyModel),
-        ("SpineTrack", SpineTrackModel),
+        ("COCO", "coco"),
+        ("MPII", "mpii"),
+        ("Human3.6M", "human36m"),
+        ("HALPE26", "halpe26"),
+        ("Hand21", "hand21"),
+        ("Face68", "face68"),
+        ("HALPE FullBody", "halpe_fullbody"),
+        ("COCO WholeBody", "coco_wholebody"),
+        ("SpineTrack", "spinetrack"),
     ]
 )
+
+_unsupported_skeletons = set(SKELETON_DISPLAY_NAMES.values()) - set(SUPPORTED_SKELETONS)
+if _unsupported_skeletons:
+    raise RuntimeError(
+        f"playground.py references unsupported skeletons: {sorted(_unsupported_skeletons)}"
+    )
 
 BONE_COLOR = (0.77, 0.81, 0.88, 1.0)
 JOINT_COLOR = (0.00, 0.48, 1.00, 1.0)
@@ -364,7 +358,7 @@ def _make_animation_buffers(model) -> tuple[torch.Tensor, torch.Tensor]:
     dtype = model.rest_offsets.dtype
     device = model.rest_offsets.device
     return (
-        torch.zeros(model.num_joints, 3, dtype=dtype, device=device),
+        torch.zeros(model.NUM_JOINTS, 3, dtype=dtype, device=device),
         torch.zeros(3, dtype=dtype, device=device),
     )
 
@@ -645,7 +639,7 @@ def build_walk_tensors(model) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         device=device,
     )
     body_pose = torch.zeros(
-        num_frames, model.num_joints - 1, 3, dtype=dtype, device=device
+        num_frames, model.NUM_JOINTS - 1, 3, dtype=dtype, device=device
     )
     body_pose_indices = {
         model.joint_names[joint_index]: body_pose_index
@@ -1049,25 +1043,25 @@ class FittingWorker(QtCore.QObject):
     def __init__(
         self,
         *,
-        model_factory: type,
+        skeleton_name: str,
         sequence: dict[str, torch.Tensor],
         priors_path: Path | None,
         mode: str,
         num_iters: int,
         lr: float,
-        optimize_bone_scales: bool,
+        optimize_scales: bool,
         use_pose_prior_latent: bool,
         init_from_ik: bool,
         progress_interval: int,
     ) -> None:
         super().__init__()
-        self.model_factory = model_factory
+        self.skeleton_name = skeleton_name
         self.sequence = sequence
         self.priors_path = priors_path
         self.mode = mode
         self.num_iters = int(num_iters)
         self.lr = float(lr)
-        self.optimize_bone_scales = optimize_bone_scales
+        self.optimize_scales = optimize_scales
         self.use_pose_prior_latent = use_pose_prior_latent
         self.init_from_ik = init_from_ik
         self.progress_interval = max(int(progress_interval), 1)
@@ -1076,12 +1070,7 @@ class FittingWorker(QtCore.QObject):
     @QtCore.Slot()
     def run(self) -> None:
         try:
-            model = self.model_factory(
-                create_global_orient=False,
-                create_body_pose=False,
-                create_bone_scales=False,
-                create_transl=False,
-            )
+            model = build_layer(self.skeleton_name)
             pose_prior = None
             joint_limit_prior = None
             if self.priors_path is not None:
@@ -1097,7 +1086,7 @@ class FittingWorker(QtCore.QObject):
             frame_joints: list[np.ndarray | None] = [None] * total_frames
             frame_full_pose: list[torch.Tensor] = []
             frame_transl: list[torch.Tensor] = []
-            frame_bone_scales: list[torch.Tensor] = []
+            frame_scales: list[torch.Tensor] = []
             prev_state: dict[str, torch.Tensor] | None = None
             last_losses: dict[str, float] = {}
             total_completed_iters = 0
@@ -1134,7 +1123,7 @@ class FittingWorker(QtCore.QObject):
                 fit_kwargs = {
                     "num_iters": self.num_iters,
                     "lr": self.lr,
-                    "optimize_bone_scales": self.optimize_bone_scales,
+                    "optimize_scales": self.optimize_scales,
                     "use_pose_prior_latent": self.use_pose_prior_latent,
                     "progress_callback": on_progress,
                     "progress_interval": self.progress_interval,
@@ -1182,7 +1171,7 @@ class FittingWorker(QtCore.QObject):
                     )
                 )
                 frame_transl.append(output.transl.squeeze(0).detach().cpu())
-                frame_bone_scales.append(output.bone_scales.squeeze(0).detach().cpu())
+                frame_scales.append(output.scales.squeeze(0).detach().cpu())
                 frame_joints[frame_index] = (
                     output.joints.squeeze(0).detach().cpu().numpy()
                 )
@@ -1191,7 +1180,7 @@ class FittingWorker(QtCore.QObject):
                     .detach()
                     .cpu(),
                     "init_body_pose": output.body_pose.squeeze(0).detach().cpu(),
-                    "init_bone_scales": output.bone_scales.squeeze(0).detach().cpu(),
+                    "init_scales": output.scales.squeeze(0).detach().cpu(),
                     "init_transl": output.transl.squeeze(0).detach().cpu(),
                 }
                 last_losses = dict(result.losses)
@@ -1200,7 +1189,7 @@ class FittingWorker(QtCore.QObject):
             payload = {
                 "full_pose": torch.stack(frame_full_pose, dim=0),
                 "transl": torch.stack(frame_transl, dim=0),
-                "bone_scales": torch.stack(frame_bone_scales, dim=0),
+                "scales": torch.stack(frame_scales, dim=0),
                 "joints": np.stack(
                     [value for value in frame_joints if value is not None], axis=0
                 ),
@@ -1606,13 +1595,13 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.resize(1500, 920)
 
         self.model = None
-        self.model_factory = None
+        self.current_skeleton_name: str | None = None
         self.available_animations: list[AnimationPreset] = []
         self.animation_time = 0.0
         self.animation_speed = 1.0
         self.full_pose = torch.zeros(1, 3)
         self.translation = torch.zeros(3)
-        self.bone_scales = torch.ones(1, 3)
+        self.scales = torch.ones(1, 3)
         self.global_bone_scale = 1.0
         self.rom_limits: dict[str, list[AxisRomLimit]] = {}
         self.scale_joint_indices: list[int] = []
@@ -1631,16 +1620,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.preview_override_joints: np.ndarray | None = None
         self.fit_thread: QtCore.QThread | None = None
         self.fit_worker: FittingWorker | None = None
-        self.example_body_pose: torch.Tensor | None = None
-        self.example_global_orient: torch.Tensor | None = None
-        self.example_transl: torch.Tensor | None = None
-        self.example_labels: list[str] = []
         self.animation_timer = QtCore.QTimer(self)
         self.animation_timer.setInterval(int(round(self.ANIMATION_DT * 1000)))
         self.animation_timer.timeout.connect(self._advance_animation)
-        self.example_timer = QtCore.QTimer(self)
-        self.example_timer.setInterval(240)
-        self.example_timer.timeout.connect(self._advance_example_frame)
         self.sequence_timer = QtCore.QTimer(self)
         self.sequence_timer.setInterval(120)
         self.sequence_timer.timeout.connect(self._advance_sequence_frame)
@@ -1818,7 +1800,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         skeleton_group = QtWidgets.QGroupBox("Skeleton")
         skeleton_layout = QtWidgets.QVBoxLayout(skeleton_group)
         self.skeleton_combo = QtWidgets.QComboBox()
-        self.skeleton_combo.addItems(list(SKELETON_FACTORIES.keys()))
+        self.skeleton_combo.addItems(list(SKELETON_DISPLAY_NAMES.keys()))
         self.skeleton_combo.setCurrentText("Human3.6M")
         self.skeleton_combo.currentTextChanged.connect(self._load_skeleton)
         self.info_label = QtWidgets.QLabel()
@@ -1878,42 +1860,10 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         animation_layout.addWidget(self.animation_phase_slider)
         left_sidebar_layout.addWidget(animation_group)
 
-        example_group = QtWidgets.QGroupBox("Examples")
-        example_layout = QtWidgets.QVBoxLayout(example_group)
-        example_note = QtWidgets.QLabel(
-            "Replay pose-parameter examples inside the editor. The Human3.6M walk keyframes come from examples/visualize_pose_params.py."
-        )
-        example_note.setWordWrap(True)
-        example_note.setStyleSheet(SECONDARY_TEXT_STYLE)
-        example_layout.addWidget(example_note)
-        self.example_combo = QtWidgets.QComboBox()
-        self.example_combo.currentIndexChanged.connect(self._on_example_changed)
-        example_layout.addWidget(self.example_combo)
-
-        self.example_frame_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
-        self.example_frame_slider.setRange(0, 0)
-        self.example_frame_slider.valueChanged.connect(self._on_example_frame_changed)
-        example_layout.addWidget(self.example_frame_slider)
-
-        self.example_frame_label = QtWidgets.QLabel("No example loaded.")
-        self.example_frame_label.setStyleSheet(SECONDARY_TEXT_STYLE)
-        example_layout.addWidget(self.example_frame_label)
-
-        example_buttons = QtWidgets.QHBoxLayout()
-        self.example_toggle_button = QtWidgets.QPushButton("Play")
-        self.example_toggle_button.setProperty("prominent", True)
-        self.example_toggle_button.clicked.connect(self._toggle_example_playback)
-        self.example_restart_button = QtWidgets.QPushButton("Restart")
-        self.example_restart_button.clicked.connect(self._restart_example)
-        example_buttons.addWidget(self.example_toggle_button)
-        example_buttons.addWidget(self.example_restart_button)
-        example_layout.addLayout(example_buttons)
-        left_sidebar_layout.addWidget(example_group)
-
         fitting_group = QtWidgets.QGroupBox("Fitting")
         fitting_layout = QtWidgets.QVBoxLayout(fitting_group)
         fitting_note = QtWidgets.QLabel(
-            "Load shared .npz fitting data, run the same single-frame fitting flow as examples/fit_demo.py, and watch optimization update the viewport."
+            "Load shared .npz fitting data, run the same single-frame fitting flow and watch optimization update the viewport."
         )
         fitting_note.setWordWrap(True)
         fitting_note.setStyleSheet(SECONDARY_TEXT_STYLE)
@@ -2413,9 +2363,6 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             if self.animation_timer.isActive():
                 self.animation_timer.stop()
                 self._update_animation_controls()
-            if self.example_timer.isActive():
-                self.example_timer.stop()
-                self._update_example_controls()
             self.sequence_timer.start()
         self._update_fit_controls()
 
@@ -2443,118 +2390,6 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             sequence[key] = torch.stack(values, dim=0)
         return sequence
 
-    def _populate_example_selectors(self) -> None:
-        current_key = (
-            self.example_combo.currentData()
-            if hasattr(self, "example_combo")
-            else "none"
-        )
-        self.example_combo.blockSignals(True)
-        self.example_combo.clear()
-        self.example_combo.addItem("None", userData="none")
-        if _normalize_skeleton_name(self.model.spec.name) == "human36m":
-            self.example_combo.addItem("Walk Keyframes", userData="walk_keyframes")
-
-        restore_index = 0
-        for index in range(self.example_combo.count()):
-            if self.example_combo.itemData(index) == current_key:
-                restore_index = index
-                break
-        self.example_combo.setCurrentIndex(restore_index)
-        self.example_combo.blockSignals(False)
-        self._on_example_changed()
-
-    def _current_example_key(self) -> str:
-        return self.example_combo.currentData() or "none"
-
-    def _on_example_changed(self, *_args) -> None:
-        self.example_timer.stop()
-        self.example_body_pose = None
-        self.example_global_orient = None
-        self.example_transl = None
-        self.example_labels = []
-
-        if self._current_example_key() == "walk_keyframes":
-            body_pose, global_orient, transl = build_walk_tensors(self.model)
-            self.example_body_pose = body_pose.detach().cpu()
-            self.example_global_orient = global_orient.detach().cpu()
-            self.example_transl = transl.detach().cpu()
-            self.example_labels = [frame["label"] for frame in WALK_POSE_PARAMS]
-            self.example_frame_slider.blockSignals(True)
-            self.example_frame_slider.setRange(0, len(self.example_labels) - 1)
-            self.example_frame_slider.setValue(0)
-            self.example_frame_slider.blockSignals(False)
-            self._apply_example_frame(0)
-        else:
-            self.example_frame_slider.blockSignals(True)
-            self.example_frame_slider.setRange(0, 0)
-            self.example_frame_slider.setValue(0)
-            self.example_frame_slider.blockSignals(False)
-            self.example_frame_label.setText("No example loaded.")
-        self._update_example_controls()
-
-    def _apply_example_frame(self, frame_index: int) -> None:
-        if (
-            self.example_body_pose is None
-            or self.example_global_orient is None
-            or self.example_transl is None
-        ):
-            return
-        frame_index = int(np.clip(frame_index, 0, len(self.example_labels) - 1))
-        self.full_pose.zero_()
-        self.full_pose[self.model.root_index] = self.example_global_orient[frame_index]
-        self.full_pose[list(self.model.non_root_joint_indices)] = (
-            self.example_body_pose[frame_index]
-        )
-        self.translation = self.example_transl[frame_index].clone()
-        self._sync_pose_sliders()
-        self._sync_translation_sliders()
-        self.example_frame_label.setText(
-            f"Frame {frame_index + 1}/{len(self.example_labels)}: {self.example_labels[frame_index]}"
-        )
-        self._refresh_view()
-
-    def _on_example_frame_changed(self, value: int) -> None:
-        self._apply_example_frame(value)
-
-    def _toggle_example_playback(self, *_args) -> None:
-        if self.example_body_pose is None:
-            return
-        if self.example_timer.isActive():
-            self.example_timer.stop()
-        else:
-            if self.animation_timer.isActive():
-                self.animation_timer.stop()
-                self._update_animation_controls()
-            if self.sequence_timer.isActive():
-                self.sequence_timer.stop()
-                self._update_fit_controls()
-            self.example_timer.start()
-        self._update_example_controls()
-
-    def _restart_example(self, *_args) -> None:
-        if self.example_body_pose is None:
-            return
-        self.example_frame_slider.setValue(0)
-        self._update_example_controls()
-
-    def _advance_example_frame(self) -> None:
-        if self.example_body_pose is None:
-            self.example_timer.stop()
-            self._update_example_controls()
-            return
-        next_index = (self.example_frame_slider.value() + 1) % len(self.example_labels)
-        self.example_frame_slider.setValue(next_index)
-        self._update_example_controls()
-
-    def _update_example_controls(self) -> None:
-        active = self.example_body_pose is not None
-        playing = self.example_timer.isActive()
-        self.example_frame_slider.setEnabled(active)
-        self.example_toggle_button.setEnabled(active)
-        self.example_restart_button.setEnabled(active)
-        self.example_toggle_button.setText("Pause" if playing else "Play")
-
     def _load_dataset_from_file(self, *_args) -> None:
         file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
@@ -2567,7 +2402,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         path = Path(file_path)
         try:
             dataset = FrameDataset.from_npz(
-                path, expected_num_joints=self.model.num_joints
+                path, expected_num_joints=self.model.NUM_JOINTS
             )
         except Exception as exc:  # pragma: no cover - GUI error reporting
             QtWidgets.QMessageBox.warning(self, "Load Dataset", str(exc))
@@ -2715,9 +2550,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             self.translation = self.sequence_fit_payload["transl"][
                 relative_index
             ].clone()
-            self.bone_scales = self.sequence_fit_payload["bone_scales"][
-                relative_index
-            ].clone()
+            self.scales = self.sequence_fit_payload["scales"][relative_index].clone()
             self._sync_pose_sliders()
             self._sync_translation_sliders()
             self._sync_scale_sliders()
@@ -2809,7 +2642,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
     def _start_fit(self, *_args) -> None:
         if (
             self.current_sample is None
-            or self.model_factory is None
+            or self.current_skeleton_name is None
             or self.range_sequence is None
         ):
             return
@@ -2832,13 +2665,13 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         progress_interval = max(1, min(10, self.fit_iters_spin.value() // 25 or 1))
         self.fit_thread = QtCore.QThread(self)
         self.fit_worker = FittingWorker(
-            model_factory=self.model_factory,
+            skeleton_name=self.current_skeleton_name,
             sequence=sequence,
             priors_path=self.priors_path,
             mode=fit_mode,
             num_iters=self.fit_iters_spin.value(),
             lr=self.fit_lr_spin.value(),
-            optimize_bone_scales=self.fit_optimize_scale_check.isChecked(),
+            optimize_scales=self.fit_optimize_scale_check.isChecked(),
             use_pose_prior_latent=self.fit_pose_prior_check.isChecked(),
             init_from_ik=self.fit_init_from_ik_check.isChecked(),
             progress_interval=progress_interval,
@@ -2922,13 +2755,13 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.sequence_fit_payload = {
             "full_pose": payload["full_pose"].clone(),
             "transl": payload["transl"].clone(),
-            "bone_scales": payload["bone_scales"].clone(),
+            "scales": payload["scales"].clone(),
             "joints": np.asarray(payload["joints"], dtype=float).copy(),
         }
         self.current_sample_index = self.range_start_index
         self.full_pose = self.sequence_fit_payload["full_pose"][0].clone()
         self.translation = self.sequence_fit_payload["transl"][0].clone()
-        self.bone_scales = self.sequence_fit_payload["bone_scales"][0].clone()
+        self.scales = self.sequence_fit_payload["scales"][0].clone()
         self.global_bone_scale = 1.0
         self.preview_override_joints = None
         self._sync_pose_sliders()
@@ -3078,24 +2911,24 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._status_message(f"Loaded ROM limits from {path.name}")
 
     def _load_skeleton(self, display_name: str) -> None:
-        model_cls = SKELETON_FACTORIES[display_name]
-        self.model_factory = model_cls
-        self.model = model_cls(
+        skeleton_name = SKELETON_DISPLAY_NAMES[display_name]
+        self.current_skeleton_name = skeleton_name
+        self.model = create(
+            skeleton_name,
             create_global_orient=False,
             create_body_pose=False,
-            create_bone_scales=False,
+            create_scales=False,
             create_transl=False,
         )
         dtype = self.model.rest_offsets.dtype
-        self.full_pose = torch.zeros(self.model.num_joints, 3, dtype=dtype)
+        self.full_pose = torch.zeros(self.model.NUM_JOINTS, 3, dtype=dtype)
         self.translation = torch.zeros(3, dtype=dtype)
-        self.bone_scales = torch.ones(self.model.num_joints, 3, dtype=dtype)
+        self.scales = torch.ones(self.model.NUM_JOINTS, 3, dtype=dtype)
         self.global_bone_scale = 1.0
         self.rom_limits = self._default_rom_limits()
-        self.scale_joint_indices = list(range(self.model.num_joints))
+        self.scale_joint_indices = list(range(self.model.NUM_JOINTS))
         self.animation_time = 0.0
         self.animation_timer.stop()
-        self.example_timer.stop()
         self._clear_fit_preview()
 
         self.viewport.set_topology(self.model.parents)
@@ -3105,11 +2938,10 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.info_label.setText(
             f"Spec: {self.model.spec.name}\n"
             f"Root joint: {self.model.joint_names[self.model.root_index]}\n"
-            f"Joints: {self.model.num_joints}"
+            f"Joints: {self.model.NUM_JOINTS}"
         )
 
         self._populate_animation_selectors()
-        self._populate_example_selectors()
         self._populate_joint_selectors()
         self._sync_pose_sliders()
         self._sync_rom_controls()
@@ -3118,7 +2950,6 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._sync_global_scale_slider()
         self._sync_animation_phase_slider()
         self._update_animation_controls()
-        self._update_example_controls()
         self._set_fit_idle()
         self._refresh_view(fit_camera=True)
 
@@ -3188,7 +3019,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
     def _make_scale_callback(self, axis: int):
         def callback(value: float) -> None:
             joint_index = self._selected_scale_joint()
-            self.bone_scales[joint_index, axis] = value
+            self.scales[joint_index, axis] = value
             self._refresh_view()
 
         return callback
@@ -3218,9 +3049,6 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         if self.animation_timer.isActive():
             self.animation_timer.stop()
         else:
-            if self.example_timer.isActive():
-                self.example_timer.stop()
-                self._update_example_controls()
             if self.sequence_timer.isActive():
                 self.sequence_timer.stop()
                 self._update_fit_controls()
@@ -3289,7 +3117,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             return
         joint_index = self.scale_joint_indices[selection]
         for axis, slider in enumerate(self.scale_sliders):
-            slider.set_value(float(self.bone_scales[joint_index, axis]), emit=False)
+            slider.set_value(float(self.scales[joint_index, axis]), emit=False)
 
     def _sync_global_scale_slider(self) -> None:
         self.global_scale_slider.set_value(self.global_bone_scale, emit=False)
@@ -3363,17 +3191,16 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
     def _reset_selected_bone(self, *_args) -> None:
         joint_index = self._selected_scale_joint()
-        self.bone_scales[joint_index].fill_(1.0)
+        self.scales[joint_index].fill_(1.0)
         self._sync_scale_sliders()
         self._refresh_view()
 
     def _reset_all(self, *_args) -> None:
         self.full_pose.zero_()
         self.translation.zero_()
-        self.bone_scales.fill_(1.0)
+        self.scales.fill_(1.0)
         self.global_bone_scale = 1.0
         self.animation_time = 0.0
-        self.example_timer.stop()
         self.sequence_timer.stop()
         self._clear_sequence_fit()
         self._sync_pose_sliders()
@@ -3382,7 +3209,6 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._sync_global_scale_slider()
         self._sync_animation_phase_slider()
         self._update_fit_controls()
-        self._update_example_controls()
         self._refresh_view(fit_camera=True)
 
     def _on_global_scale_changed(self, value: float) -> None:
@@ -3412,7 +3238,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         with torch.no_grad():
             output = self.model(
                 full_pose=pose,
-                bone_scales=self.bone_scales * self.global_bone_scale,
+                scales=self.scales * self.global_bone_scale,
                 transl=translation,
             )
         return output.joints.detach().cpu().numpy()

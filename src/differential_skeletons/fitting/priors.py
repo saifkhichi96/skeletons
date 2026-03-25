@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...rotations import (
+from ..rotations import (
     matrix_to_axis_angle,
     rot6d_to_matrix,
     rotation_geodesic_distance,

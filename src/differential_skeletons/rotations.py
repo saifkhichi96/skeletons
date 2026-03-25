@@ -187,12 +187,13 @@ def rotation_geodesic_distance(
     rotation_b: torch.Tensor,
     *,
     reduction: str = "none",
+    eps: float = 1e-6,
 ) -> torch.Tensor:
     if rotation_a.shape[-2:] != (3, 3) or rotation_b.shape[-2:] != (3, 3):
         raise ValueError("rotation_a and rotation_b must end in (3, 3).")
     relative = rotation_a.transpose(-2, -1) @ rotation_b
     trace = relative[..., 0, 0] + relative[..., 1, 1] + relative[..., 2, 2]
-    cosine = ((trace - 1.0) * 0.5).clamp(-1.0, 1.0)
+    cosine = ((trace - 1.0) * 0.5).clamp(-1.0 + eps, 1.0 - eps)
     angle = torch.acos(cosine)
     if reduction == "mean":
         return angle.mean()

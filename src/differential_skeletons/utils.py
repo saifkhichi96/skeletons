@@ -9,12 +9,12 @@ Tensor = torch.Tensor
 
 
 @dataclass
-class SkeletalOutput:
+class ModelOutput:
     joints: Optional[Tensor] = None
     full_pose: Optional[Tensor] = None
     global_orient: Optional[Tensor] = None
     body_pose: Optional[Tensor] = None
-    bone_scales: Optional[Tensor] = None
+    scales: Optional[Tensor] = None
     transl: Optional[Tensor] = None
     scaled_offsets: Optional[Tensor] = None
     local_rotations: Optional[Tensor] = None

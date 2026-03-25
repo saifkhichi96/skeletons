@@ -5,9 +5,9 @@ from typing import Callable
 
 import torch
 
-from ...ik import estimate_bone_scales_from_joints, estimate_rotations_from_joints
-from ...model import SkeletalModel
-from ...rotations import matrix_to_rot6d
+from ..ik import estimate_rotations_from_joints, estimate_scales_from_joints
+from ..model import SkeletalModel
+from ..rotations import matrix_to_rot6d
 from .camera import PerspectiveCamera, WeakPerspectiveCamera
 from .priors import JointLimitPrior, MotionSmoothnessPrior, PoseVAE, TemporalPrior
 
@@ -20,20 +20,14 @@ class FittingWeights:
     joints_3d: float = 1.0
     latent: float = 1e-3
     joint_limits: float = 1e-2
-    bone_scales: float = 1e-3
+    scales: float = 1e-3
     smoothness: float = 1e-2
     temporal: float = 1e-2
 
 
 @dataclass
 class FittingResult:
-    """Outputs returned by a fitting run.
-
-    Attributes:
-        model_output: The final forward pass result from the fitted model.
-        losses: Scalar loss terms from the last optimization step.
-        iterations: Number of optimizer steps that were run.
-    """
+    """Outputs returned by a fitting run."""
 
     model_output: object
     losses: dict[str, float]
@@ -81,15 +75,15 @@ class SkeletalFitter:
 
     def _default_body_pose(self, batch_shape: tuple[int, ...]) -> torch.Tensor:
         return torch.zeros(
-            batch_shape + (self.model.num_joints - 1, 6), device=self.device
+            batch_shape + (self.model.NUM_JOINTS - 1, 6), device=self.device
         )
 
     def _default_global_orient(self, batch_shape: tuple[int, ...]) -> torch.Tensor:
         ident = torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], device=self.device)
         return ident.expand(batch_shape + (6,)).clone()
 
-    def _default_bone_scales(self, batch_shape: tuple[int, ...]) -> torch.Tensor:
-        return torch.ones(batch_shape + (self.model.num_joints, 3), device=self.device)
+    def _default_scales(self, batch_shape: tuple[int, ...]) -> torch.Tensor:
+        return torch.ones(batch_shape + (self.model.NUM_JOINTS, 3), device=self.device)
 
     def _match_batch_shape(
         self,
@@ -186,7 +180,7 @@ class SkeletalFitter:
         weights: torch.Tensor | None = None,
         num_iters: int = 300,
         lr: float = 1e-2,
-        optimize_bone_scales: bool = False,
+        optimize_scales: bool = False,
         use_pose_prior_latent: bool = True,
         init_from_ik: bool = True,
         fitting_weights: FittingWeights | None = None,
@@ -194,7 +188,7 @@ class SkeletalFitter:
         progress_interval: int = 10,
         init_global_orient: torch.Tensor | None = None,
         init_body_pose: torch.Tensor | None = None,
-        init_bone_scales: torch.Tensor | None = None,
+        init_scales: torch.Tensor | None = None,
         init_transl: torch.Tensor | None = None,
     ) -> FittingResult:
         """Fit a single-frame 3D pose to target joints."""
@@ -209,7 +203,7 @@ class SkeletalFitter:
             for value in (
                 init_global_orient,
                 init_body_pose,
-                init_bone_scales,
+                init_scales,
                 init_transl,
             )
         )
@@ -221,7 +215,7 @@ class SkeletalFitter:
                 )
             global_init = self._match_batch_shape(init_global_orient, batch_shape, (6,))
             body_init = self._match_batch_shape(
-                init_body_pose, batch_shape, (self.model.num_joints - 1, 6)
+                init_body_pose, batch_shape, (self.model.NUM_JOINTS - 1, 6)
             )
             transl_default = target[..., self.model.root_index, :].detach()
             transl_init = (
@@ -229,18 +223,16 @@ class SkeletalFitter:
                 if init_transl is not None
                 else transl_default
             )
-            bone_scales_init = (
+            scales_init = (
                 self._match_batch_shape(
-                    init_bone_scales, batch_shape, (self.model.num_joints, 3)
+                    init_scales, batch_shape, (self.model.NUM_JOINTS, 3)
                 )
-                if init_bone_scales is not None
-                else self._default_bone_scales(batch_shape)
+                if init_scales is not None
+                else self._default_scales(batch_shape)
             )
         elif init_from_ik:
-            bone_scales_init = estimate_bone_scales_from_joints(target, self.model)
-            ik = estimate_rotations_from_joints(
-                target, self.model, bone_scales=bone_scales_init
-            )
+            scales_init = estimate_scales_from_joints(target, self.model)
+            ik = estimate_rotations_from_joints(target, self.model, scales=scales_init)
             full_rot6d = matrix_to_rot6d(ik.local_rotations)
             global_init = full_rot6d[..., self.model.root_index, :].detach()
             body_init = full_rot6d[
@@ -248,17 +240,15 @@ class SkeletalFitter:
             ].detach()
             transl_init = target[..., self.model.root_index, :].detach()
         else:
-            bone_scales_init = self._default_bone_scales(batch_shape)
+            scales_init = self._default_scales(batch_shape)
             global_init = self._default_global_orient(batch_shape)
             body_init = self._default_body_pose(batch_shape)
             transl_init = target[..., self.model.root_index, :].detach()
 
         global_orient = torch.nn.Parameter(global_init.clone())
         transl = torch.nn.Parameter(transl_init.clone())
-        bone_scales = (
-            torch.nn.Parameter(bone_scales_init.clone())
-            if optimize_bone_scales
-            else bone_scales_init
+        scales = (
+            torch.nn.Parameter(scales_init.clone()) if optimize_scales else scales_init
         )
 
         latent = None
@@ -271,8 +261,8 @@ class SkeletalFitter:
         else:
             direct_pose = torch.nn.Parameter(body_init.clone())
             parameters = [global_orient, transl, direct_pose]
-        if isinstance(bone_scales, torch.nn.Parameter):
-            parameters.append(bone_scales)
+        if isinstance(scales, torch.nn.Parameter):
+            parameters.append(scales)
 
         last_losses: dict[str, float] = {}
 
@@ -282,7 +272,7 @@ class SkeletalFitter:
             output = self.model(
                 global_orient=global_orient,
                 body_pose=body_pose,
-                bone_scales=bone_scales,
+                scales=scales,
                 transl=transl,
                 pose_repr="rot6d",
                 return_local_rotations=True,
@@ -305,10 +295,10 @@ class SkeletalFitter:
                 loss = loss + fitting_weights.joint_limits * limit_loss
                 last_losses["joint_limits"] = float(limit_loss.detach().cpu())
 
-            if optimize_bone_scales:
-                scale_loss = (bone_scales - 1.0).pow(2).mean()
-                loss = loss + fitting_weights.bone_scales * scale_loss
-                last_losses["bone_scales"] = float(scale_loss.detach().cpu())
+            if optimize_scales:
+                scale_loss = (scales - 1.0).pow(2).mean()
+                loss = loss + fitting_weights.scales * scale_loss
+                last_losses["scales"] = float(scale_loss.detach().cpu())
             return loss
 
         def snapshot() -> tuple[torch.Tensor, dict[str, float]]:
@@ -316,7 +306,7 @@ class SkeletalFitter:
             output = self.model(
                 global_orient=global_orient,
                 body_pose=body_pose,
-                bone_scales=bone_scales,
+                scales=scales,
                 transl=transl,
                 pose_repr="rot6d",
             )
@@ -337,7 +327,7 @@ class SkeletalFitter:
             output = self.model(
                 global_orient=global_orient,
                 body_pose=body_pose,
-                bone_scales=bone_scales,
+                scales=scales,
                 transl=transl,
                 pose_repr="rot6d",
                 return_local_rotations=True,
@@ -356,7 +346,7 @@ class SkeletalFitter:
         confidences: torch.Tensor | None = None,
         num_iters: int = 500,
         lr: float = 5e-3,
-        optimize_bone_scales: bool = False,
+        optimize_scales: bool = False,
         use_pose_prior_latent: bool = True,
         init_depth: float = 3000.0,
         fitting_weights: FittingWeights | None = None,
@@ -364,7 +354,7 @@ class SkeletalFitter:
         progress_interval: int = 10,
         init_global_orient: torch.Tensor | None = None,
         init_body_pose: torch.Tensor | None = None,
-        init_bone_scales: torch.Tensor | None = None,
+        init_scales: torch.Tensor | None = None,
         init_transl: torch.Tensor | None = None,
     ) -> FittingResult:
         """Fit a single-frame 3D pose from 2D joints and a camera model."""
@@ -386,29 +376,29 @@ class SkeletalFitter:
             transl_init = torch.zeros(batch_shape + (3,), device=self.device)
             transl_init[..., 2] = init_depth
         transl = torch.nn.Parameter(transl_init)
-        if optimize_bone_scales:
-            bone_scales_init = (
+        if optimize_scales:
+            scales_init = (
                 self._match_batch_shape(
-                    init_bone_scales, batch_shape, (self.model.num_joints, 3)
+                    init_scales, batch_shape, (self.model.NUM_JOINTS, 3)
                 )
-                if init_bone_scales is not None
-                else self._default_bone_scales(batch_shape)
+                if init_scales is not None
+                else self._default_scales(batch_shape)
             )
-            bone_scales = torch.nn.Parameter(bone_scales_init.clone())
+            scales = torch.nn.Parameter(scales_init.clone())
         else:
-            bone_scales = (
+            scales = (
                 self._match_batch_shape(
-                    init_bone_scales, batch_shape, (self.model.num_joints, 3)
+                    init_scales, batch_shape, (self.model.NUM_JOINTS, 3)
                 )
-                if init_bone_scales is not None
-                else self._default_bone_scales(batch_shape)
+                if init_scales is not None
+                else self._default_scales(batch_shape)
             )
 
         latent = None
         direct_pose = None
         body_init = (
             self._match_batch_shape(
-                init_body_pose, batch_shape, (self.model.num_joints - 1, 6)
+                init_body_pose, batch_shape, (self.model.NUM_JOINTS - 1, 6)
             )
             if init_body_pose is not None
             else self._default_body_pose(batch_shape)
@@ -421,8 +411,8 @@ class SkeletalFitter:
         else:
             direct_pose = torch.nn.Parameter(body_init.clone())
             parameters = [global_orient, transl, direct_pose]
-        if isinstance(bone_scales, torch.nn.Parameter):
-            parameters.append(bone_scales)
+        if isinstance(scales, torch.nn.Parameter):
+            parameters.append(scales)
 
         last_losses: dict[str, float] = {}
 
@@ -432,7 +422,7 @@ class SkeletalFitter:
             output = self.model(
                 global_orient=global_orient,
                 body_pose=body_pose,
-                bone_scales=bone_scales,
+                scales=scales,
                 transl=transl,
                 pose_repr="rot6d",
                 return_local_rotations=True,
@@ -456,10 +446,10 @@ class SkeletalFitter:
                 loss = loss + fitting_weights.joint_limits * limit_loss
                 last_losses["joint_limits"] = float(limit_loss.detach().cpu())
 
-            if optimize_bone_scales:
-                scale_loss = (bone_scales - 1.0).pow(2).mean()
-                loss = loss + fitting_weights.bone_scales * scale_loss
-                last_losses["bone_scales"] = float(scale_loss.detach().cpu())
+            if optimize_scales:
+                scale_loss = (scales - 1.0).pow(2).mean()
+                loss = loss + fitting_weights.scales * scale_loss
+                last_losses["scales"] = float(scale_loss.detach().cpu())
             return loss
 
         def snapshot() -> tuple[torch.Tensor, dict[str, float]]:
@@ -467,7 +457,7 @@ class SkeletalFitter:
             output = self.model(
                 global_orient=global_orient,
                 body_pose=body_pose,
-                bone_scales=bone_scales,
+                scales=scales,
                 transl=transl,
                 pose_repr="rot6d",
             )
@@ -488,7 +478,7 @@ class SkeletalFitter:
             output = self.model(
                 global_orient=global_orient,
                 body_pose=body_pose,
-                bone_scales=bone_scales,
+                scales=scales,
                 transl=transl,
                 pose_repr="rot6d",
                 return_local_rotations=True,
@@ -506,7 +496,7 @@ class SkeletalFitter:
         weights: torch.Tensor | None = None,
         num_iters: int = 400,
         lr: float = 1e-2,
-        optimize_bone_scales: bool = True,
+        optimize_scales: bool = True,
         use_pose_prior_latent: bool = True,
         fitting_weights: FittingWeights | None = None,
     ) -> FittingResult:
@@ -517,12 +507,12 @@ class SkeletalFitter:
         weights = weights.to(self.device) if weights is not None else None
         batch_size, seq_len = target.shape[:2]
 
-        bone_scales_init = estimate_bone_scales_from_joints(target[:, 0], self.model)
+        init_scales = estimate_scales_from_joints(target[:, 0], self.model)
         ik = estimate_rotations_from_joints(
-            target.reshape(-1, self.model.num_joints, 3), self.model
+            target.reshape(-1, self.model.NUM_JOINTS, 3), self.model
         )
         full_rot6d = matrix_to_rot6d(ik.local_rotations).reshape(
-            batch_size, seq_len, self.model.num_joints, 6
+            batch_size, seq_len, self.model.NUM_JOINTS, 6
         )
         global_init = full_rot6d[..., self.model.root_index, :].detach()
         body_init = full_rot6d[..., list(self.model.non_root_joint_indices), :].detach()
@@ -530,10 +520,8 @@ class SkeletalFitter:
 
         global_orient = torch.nn.Parameter(global_init.clone())
         transl = torch.nn.Parameter(transl_init.clone())
-        bone_scales = (
-            torch.nn.Parameter(bone_scales_init.clone())
-            if optimize_bone_scales
-            else bone_scales_init
+        scales = (
+            torch.nn.Parameter(init_scales.clone()) if optimize_scales else init_scales
         )
 
         latent = None
@@ -548,8 +536,8 @@ class SkeletalFitter:
         else:
             direct_pose = torch.nn.Parameter(body_init.clone())
             parameters = [global_orient, transl, direct_pose]
-        if isinstance(bone_scales, torch.nn.Parameter):
-            parameters.append(bone_scales)
+        if isinstance(scales, torch.nn.Parameter):
+            parameters.append(scales)
 
         last_losses: dict[str, float] = {}
 
@@ -565,26 +553,26 @@ class SkeletalFitter:
                 ).reshape(
                     batch_size,
                     seq_len,
-                    self.model.num_joints - 1,
+                    self.model.NUM_JOINTS - 1,
                     6,
                 )
             else:
                 body_pose = direct_pose
             output = self.model(
                 global_orient=global_orient.reshape(-1, 6),
-                body_pose=body_pose.reshape(-1, self.model.num_joints - 1, 6),
-                bone_scales=bone_scales.repeat_interleave(seq_len, dim=0)
-                if bone_scales.ndim == 3
-                else bone_scales,
+                body_pose=body_pose.reshape(-1, self.model.NUM_JOINTS - 1, 6),
+                scales=scales.repeat_interleave(seq_len, dim=0)
+                if scales.ndim == 3
+                else scales,
                 transl=transl.reshape(-1, 3),
                 pose_repr="rot6d",
                 return_local_rotations=True,
             )
             pred_joints = output.joints.reshape(
-                batch_size, seq_len, self.model.num_joints, 3
+                batch_size, seq_len, self.model.NUM_JOINTS, 3
             )
             local_rot = output.local_rotations.reshape(
-                batch_size, seq_len, self.model.num_joints, 3, 3
+                batch_size, seq_len, self.model.NUM_JOINTS, 3, 3
             )
             loss_joints = self._joint_loss(pred_joints, target, weights=weights)
             loss = fitting_weights.joints_3d * loss_joints
@@ -601,7 +589,7 @@ class SkeletalFitter:
                         ..., list(self.model.non_root_joint_indices), :, :
                     ].reshape(
                         -1,
-                        self.model.num_joints - 1,
+                        self.model.NUM_JOINTS - 1,
                         3,
                         3,
                     ),
@@ -618,10 +606,10 @@ class SkeletalFitter:
             loss = loss + fitting_weights.smoothness * smooth_loss
             last_losses["smoothness"] = float(smooth_loss.detach().cpu())
 
-            if optimize_bone_scales:
-                scale_loss = (bone_scales - 1.0).pow(2).mean()
-                loss = loss + fitting_weights.bone_scales * scale_loss
-                last_losses["bone_scales"] = float(scale_loss.detach().cpu())
+            if optimize_scales:
+                scale_loss = (scales - 1.0).pow(2).mean()
+                loss = loss + fitting_weights.scales * scale_loss
+                last_losses["scales"] = float(scale_loss.detach().cpu())
             return loss
 
         self._run_optimizer(closure, parameters, lr=lr, num_iters=num_iters)
@@ -637,17 +625,17 @@ class SkeletalFitter:
                 ).reshape(
                     batch_size,
                     seq_len,
-                    self.model.num_joints - 1,
+                    self.model.NUM_JOINTS - 1,
                     6,
                 )
             else:
                 body_pose = direct_pose
             output = self.model(
                 global_orient=global_orient.reshape(-1, 6),
-                body_pose=body_pose.reshape(-1, self.model.num_joints - 1, 6),
-                bone_scales=bone_scales.repeat_interleave(seq_len, dim=0)
-                if bone_scales.ndim == 3
-                else bone_scales,
+                body_pose=body_pose.reshape(-1, self.model.NUM_JOINTS - 1, 6),
+                scales=scales.repeat_interleave(seq_len, dim=0)
+                if scales.ndim == 3
+                else scales,
                 transl=transl.reshape(-1, 3),
                 pose_repr="rot6d",
                 return_local_rotations=True,
@@ -666,7 +654,7 @@ class SkeletalFitter:
         confidences: torch.Tensor | None = None,
         num_iters: int = 500,
         lr: float = 5e-3,
-        optimize_bone_scales: bool = True,
+        optimize_scales: bool = True,
         use_pose_prior_latent: bool = True,
         init_depth: float = 3000.0,
         fitting_weights: FittingWeights | None = None,
@@ -685,10 +673,10 @@ class SkeletalFitter:
         transl_init = torch.zeros(batch_size, seq_len, 3, device=self.device)
         transl_init[..., 2] = init_depth
         transl = torch.nn.Parameter(transl_init)
-        if optimize_bone_scales:
-            bone_scales = torch.nn.Parameter(self._default_bone_scales((batch_size,)))
+        if optimize_scales:
+            scales = torch.nn.Parameter(self._default_scales((batch_size,)))
         else:
-            bone_scales = self._default_bone_scales((batch_size,))
+            scales = self._default_scales((batch_size,))
 
         latent = None
         direct_pose = None
@@ -704,8 +692,8 @@ class SkeletalFitter:
                 self._default_body_pose((batch_size, seq_len))
             )
             parameters = [global_orient, transl, direct_pose]
-        if isinstance(bone_scales, torch.nn.Parameter):
-            parameters.append(bone_scales)
+        if isinstance(scales, torch.nn.Parameter):
+            parameters.append(scales)
 
         last_losses: dict[str, float] = {}
 
@@ -721,21 +709,21 @@ class SkeletalFitter:
                 ).reshape(
                     batch_size,
                     seq_len,
-                    self.model.num_joints - 1,
+                    self.model.NUM_JOINTS - 1,
                     6,
                 )
             else:
                 body_pose = direct_pose
             output = self.model(
                 global_orient=global_orient.reshape(-1, 6),
-                body_pose=body_pose.reshape(-1, self.model.num_joints - 1, 6),
-                bone_scales=bone_scales.repeat_interleave(seq_len, dim=0),
+                body_pose=body_pose.reshape(-1, self.model.NUM_JOINTS - 1, 6),
+                scales=scales.repeat_interleave(seq_len, dim=0),
                 transl=transl.reshape(-1, 3),
                 pose_repr="rot6d",
                 return_local_rotations=True,
             )
             pred_joints = output.joints.reshape(
-                batch_size, seq_len, self.model.num_joints, 3
+                batch_size, seq_len, self.model.NUM_JOINTS, 3
             )
             projected = camera.project(pred_joints)
             loss_2d = self._joint_loss(projected, target, weights=confidences)
@@ -749,14 +737,14 @@ class SkeletalFitter:
 
             if self.joint_limit_prior is not None:
                 local_rot = output.local_rotations.reshape(
-                    batch_size, seq_len, self.model.num_joints, 3, 3
+                    batch_size, seq_len, self.model.NUM_JOINTS, 3, 3
                 )
                 limit_loss = self.joint_limit_prior(
                     local_rot[
                         ..., list(self.model.non_root_joint_indices), :, :
                     ].reshape(
                         -1,
-                        self.model.num_joints - 1,
+                        self.model.NUM_JOINTS - 1,
                         3,
                         3,
                     ),
@@ -773,10 +761,10 @@ class SkeletalFitter:
             loss = loss + fitting_weights.smoothness * smooth_loss
             last_losses["smoothness"] = float(smooth_loss.detach().cpu())
 
-            if optimize_bone_scales:
-                scale_loss = (bone_scales - 1.0).pow(2).mean()
-                loss = loss + fitting_weights.bone_scales * scale_loss
-                last_losses["bone_scales"] = float(scale_loss.detach().cpu())
+            if optimize_scales:
+                scale_loss = (scales - 1.0).pow(2).mean()
+                loss = loss + fitting_weights.scales * scale_loss
+                last_losses["scales"] = float(scale_loss.detach().cpu())
             return loss
 
         self._run_optimizer(closure, parameters, lr=lr, num_iters=num_iters)
@@ -792,15 +780,15 @@ class SkeletalFitter:
                 ).reshape(
                     batch_size,
                     seq_len,
-                    self.model.num_joints - 1,
+                    self.model.NUM_JOINTS - 1,
                     6,
                 )
             else:
                 body_pose = direct_pose
             output = self.model(
                 global_orient=global_orient.reshape(-1, 6),
-                body_pose=body_pose.reshape(-1, self.model.num_joints - 1, 6),
-                bone_scales=bone_scales.repeat_interleave(seq_len, dim=0),
+                body_pose=body_pose.reshape(-1, self.model.NUM_JOINTS - 1, 6),
+                scales=scales.repeat_interleave(seq_len, dim=0),
                 transl=transl.reshape(-1, 3),
                 pose_repr="rot6d",
                 return_local_rotations=True,

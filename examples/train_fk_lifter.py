@@ -11,9 +11,21 @@ if str(SRC) not in sys.path:
 
 import torch
 import torch.nn as nn
+from _work_dir import (
+    log_status,
+    make_run_name,
+    resolve_work_dir,
+    save_json,
+    write_last_checkpoint,
+)
 from torch.utils.data import DataLoader, TensorDataset
 
-from differential_skeletons import ForwardKinematicsLoss, Human36MModel
+from differential_skeletons import (
+    SUPPORTED_SKELETONS,
+    ForwardKinematicsLoss,
+    SkeletalModel,
+    build_layer,
+)
 
 
 class PoseLifter(nn.Module):
@@ -37,7 +49,7 @@ class PoseLifter(nn.Module):
 
 
 def make_synthetic_dataset(
-    model: Human36MModel,
+    model: SkeletalModel,
     *,
     num_samples: int,
     pose_std: float,
@@ -46,7 +58,7 @@ def make_synthetic_dataset(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     with torch.no_grad():
         full_pose = (
-            torch.randn(num_samples, model.num_joints, 3, device=device) * pose_std
+            torch.randn(num_samples, model.NUM_JOINTS, 3, device=device) * pose_std
         )
         joints_3d = model(full_pose=full_pose).joints.detach()
 
@@ -67,7 +79,7 @@ def make_synthetic_dataset(
 
 def evaluate(
     lifter: PoseLifter,
-    model: Human36MModel,
+    model: SkeletalModel,
     loader: DataLoader,
     fk_loss: ForwardKinematicsLoss,
     device: torch.device,
@@ -96,6 +108,7 @@ def evaluate(
 
 
 def main() -> int:
+    script_name = Path(__file__).stem
     parser = argparse.ArgumentParser(
         description="Train a simple 2D-to-3D lifting model with ForwardKinematicsLoss.",
     )
@@ -109,21 +122,58 @@ def main() -> int:
     parser.add_argument("--noise-std", type=float, default=0.01)
     parser.add_argument("--pose-reg", type=float, default=1e-4)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--skeleton",
+        choices=SUPPORTED_SKELETONS,
+        default="human36m",
+        help="Skeleton layout used for synthetic data generation and FK supervision.",
+    )
+    parser.add_argument(
+        "--work-dir",
+        type=Path,
+        default=None,
+        help="Output directory. Defaults to work_dirs/train_fk_lifter/<skeleton>_synthetic_seed<seed>.",
+    )
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    work_dir = resolve_work_dir(
+        Path(__file__),
+        run_name=make_run_name(args.skeleton, "synthetic", f"seed{args.seed}"),
+        work_dir=args.work_dir,
+    )
+    save_json(
+        work_dir / "config.json",
+        {
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "train_samples": args.train_samples,
+            "val_samples": args.val_samples,
+            "hidden_dim": args.hidden_dim,
+            "lr": args.lr,
+            "pose_std": args.pose_std,
+            "noise_std": args.noise_std,
+            "pose_reg": args.pose_reg,
+            "seed": args.seed,
+            "skeleton": args.skeleton,
+            "device": str(device),
+            "work_dir": str(work_dir),
+        },
+    )
+    log_status(script_name, f"work_dir={work_dir}")
+    log_status(script_name, f"device={device}")
 
-    model = Human36MModel(
-        create_global_orient=False,
-        create_body_pose=False,
-        create_bone_scales=False,
-        create_transl=False,
-    ).to(device)
+    log_status(script_name, f"loading rig {args.skeleton!r}")
+    model = build_layer(args.skeleton).to(device)
     fk_loss = ForwardKinematicsLoss(model)
-    lifter = PoseLifter(model.num_joints, hidden_dim=args.hidden_dim).to(device)
+    lifter = PoseLifter(model.NUM_JOINTS, hidden_dim=args.hidden_dim).to(device)
     optimizer = torch.optim.Adam(lifter.parameters(), lr=args.lr)
 
+    log_status(
+        script_name,
+        f"building synthetic train/val datasets (train={args.train_samples}, val={args.val_samples})",
+    )
     train_2d, train_3d = make_synthetic_dataset(
         model,
         num_samples=args.train_samples,
@@ -138,6 +188,7 @@ def main() -> int:
         noise_std=args.noise_std,
         device=device,
     )
+    log_status(script_name, "dataset generation complete")
 
     train_loader = DataLoader(
         TensorDataset(train_2d, train_3d),
@@ -149,7 +200,12 @@ def main() -> int:
         batch_size=args.batch_size,
         shuffle=False,
     )
+    log_status(
+        script_name,
+        f"starting training for {args.epochs} epochs with batch_size={args.batch_size} and hidden_dim={args.hidden_dim}",
+    )
 
+    history: list[dict[str, float | int]] = []
     for epoch in range(1, args.epochs + 1):
         lifter.train()
         running_loss = 0.0
@@ -173,19 +229,52 @@ def main() -> int:
 
         train_loss = running_loss / num_seen
         val_fk, val_mpjpe = evaluate(lifter, model, val_loader, fk_loss, device)
-        print(
-            f"epoch {epoch:03d} | "
-            f"train_loss={train_loss:.4f} | "
-            f"val_fk={val_fk:.4f} | "
-            f"val_mpjpe={val_mpjpe:.4f}"
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": float(train_loss),
+                "val_fk": float(val_fk),
+                "val_mpjpe": float(val_mpjpe),
+            }
+        )
+        log_status(
+            script_name,
+            f"epoch [{epoch}/{args.epochs}] "
+            f"train_loss={train_loss:.4f} "
+            f"val_fk={val_fk:.4f} "
+            f"val_mpjpe={val_mpjpe:.4f}",
         )
 
     sample_2d = val_2d[:1].to(device)
     with torch.no_grad():
         sample_pose = lifter(sample_2d)
         sample_3d = model(full_pose=sample_pose).joints[0].cpu()
-    print("Example predicted 3D joints:", sample_3d.shape)
-    print(sample_3d[:5])
+    log_status(
+        script_name, f"example predicted 3D joints shape={tuple(sample_3d.shape)}"
+    )
+    log_status(script_name, f"first five joints=\n{sample_3d[:5]}")
+
+    checkpoint = {
+        "format_version": 1,
+        "model_type": "pose_lifter",
+        "skeleton": model.spec.name,
+        "state_dict": lifter.state_dict(),
+        "hidden_dim": args.hidden_dim,
+        "history": history,
+        "sample_prediction": sample_3d,
+    }
+    checkpoint_path = work_dir / f"epoch_{args.epochs}.pth"
+    torch.save(checkpoint, checkpoint_path)
+    write_last_checkpoint(work_dir, checkpoint_path)
+    save_json(
+        work_dir / "metrics.json",
+        {
+            "final_epoch": history[-1]["epoch"] if history else 0,
+            "history": history,
+            "checkpoint": str(checkpoint_path),
+        },
+    )
+    log_status(script_name, f"saved checkpoint to {checkpoint_path}")
     return 0
 
 

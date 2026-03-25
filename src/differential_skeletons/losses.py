@@ -24,7 +24,7 @@ class ForwardKinematicsLoss(nn.Module):
         global_orient: torch.Tensor | None = None,
         body_pose: torch.Tensor | None = None,
         full_pose: torch.Tensor | None = None,
-        bone_scales: torch.Tensor | None = None,
+        scales: torch.Tensor | None = None,
         transl: torch.Tensor | None = None,
         weights: torch.Tensor | None = None,
     ) -> torch.Tensor:
@@ -32,7 +32,7 @@ class ForwardKinematicsLoss(nn.Module):
             global_orient=global_orient,
             body_pose=body_pose,
             full_pose=full_pose,
-            bone_scales=bone_scales,
+            scales=scales,
             transl=transl,
         )
         diff = pred.joints - target_joints

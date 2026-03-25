@@ -11,7 +11,7 @@ from .model import SkeletalModel
 class InverseKinematicsResult:
     local_rotations: torch.Tensor
     global_rotations: torch.Tensor
-    bone_scales: torch.Tensor
+    scales: torch.Tensor
 
 
 def _normalize_vector(vector: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
@@ -37,7 +37,7 @@ def _skew(vector: torch.Tensor) -> torch.Tensor:
     ).reshape(vector.shape[:-1] + (3, 3))
 
 
-def shortest_arc_rotation(source: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+def _shortest_arc_rotation(source: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     if source.shape[-1] != 3 or target.shape[-1] != 3:
         raise ValueError("source and target must end in 3.")
 
@@ -80,13 +80,13 @@ def shortest_arc_rotation(source: torch.Tensor, target: torch.Tensor) -> torch.T
     return general
 
 
-def kabsch_rotation(
+def _kabsch_rotation(
     source: torch.Tensor, target: torch.Tensor, weights: torch.Tensor | None = None
 ) -> torch.Tensor:
     if source.shape[-2:] != target.shape[-2:] or source.shape[-1] != 3:
         raise ValueError("source and target must have shape [..., N, 3] and match.")
     if source.shape[-2] == 1:
-        return shortest_arc_rotation(source[..., 0, :], target[..., 0, :])
+        return _shortest_arc_rotation(source[..., 0, :], target[..., 0, :])
 
     source_unit = _normalize_vector(source)
     target_unit = _normalize_vector(target)
@@ -109,21 +109,21 @@ def kabsch_rotation(
     return rotation
 
 
-def estimate_bone_scales_from_joints(
+def estimate_scales_from_joints(
     joints: torch.Tensor,
     model: SkeletalModel,
     *,
     clamp: tuple[float, float] | None = (0.5, 1.5),
 ) -> torch.Tensor:
-    if joints.shape[-2:] != (model.num_joints, 3):
-        raise ValueError(f"joints must have shape [..., {model.num_joints}, 3].")
+    if joints.shape[-2:] != (model.NUM_JOINTS, 3):
+        raise ValueError(f"joints must have shape [..., {model.NUM_JOINTS}, 3].")
 
     scales = torch.ones(
-        joints.shape[:-2] + (model.num_joints, 3),
+        joints.shape[:-2] + (model.NUM_JOINTS, 3),
         dtype=joints.dtype,
         device=joints.device,
     )
-    for body_idx in range(model.num_bodies):
+    for body_idx in range(model.NUM_BODIES):
         child_indices = model.child_body_indices[body_idx]
         if not child_indices:
             continue
@@ -156,34 +156,30 @@ def estimate_rotations_from_joints(
     joints: torch.Tensor,
     model: SkeletalModel,
     *,
-    bone_scales: torch.Tensor | None = None,
+    scales: torch.Tensor | None = None,
 ) -> InverseKinematicsResult:
-    if joints.shape[-2:] != (model.num_joints, 3):
-        raise ValueError(f"joints must have shape [..., {model.num_joints}, 3].")
+    if joints.shape[-2:] != (model.NUM_JOINTS, 3):
+        raise ValueError(f"joints must have shape [..., {model.NUM_JOINTS}, 3].")
 
     batch_shape = joints.shape[:-2]
     dtype = joints.dtype
     device = joints.device
 
-    if bone_scales is None:
-        bone_scales_full = estimate_bone_scales_from_joints(joints, model)
+    if scales is None:
+        scales_full = estimate_scales_from_joints(joints, model)
     else:
-        bone_scales_full = model._canonicalize_bone_scales(
-            bone_scales, dtype=dtype, device=device
-        )
-        if bone_scales_full.shape[:-2] != batch_shape:
-            bone_scales_full = bone_scales_full.expand(
-                batch_shape + (model.num_joints, 3)
-            )
+        scales_full = model._canonicalize_scales(scales, dtype=dtype, device=device)
+        if scales_full.shape[:-2] != batch_shape:
+            scales_full = scales_full.expand(batch_shape + (model.NUM_JOINTS, 3))
 
     global_rotations = torch.zeros(
-        batch_shape + (model.num_joints, 3, 3), dtype=dtype, device=device
+        batch_shape + (model.NUM_JOINTS, 3, 3), dtype=dtype, device=device
     )
     local_rotations = torch.zeros_like(global_rotations)
     identity = torch.eye(3, dtype=dtype, device=device).expand(batch_shape + (3, 3))
 
     scaled_offsets = model._scaled_offsets(
-        bone_scales_full,
+        scales_full,
         batch_shape=batch_shape,
         dtype=dtype,
         device=device,
@@ -213,7 +209,7 @@ def estimate_rotations_from_joints(
             ],
             dim=-2,
         )
-        global_rotation = kabsch_rotation(rest_children, observed_children)
+        global_rotation = _kabsch_rotation(rest_children, observed_children)
         global_rotations[..., joint_idx, :, :] = global_rotation
 
         parent_idx = model.parents[joint_idx]
@@ -228,5 +224,5 @@ def estimate_rotations_from_joints(
     return InverseKinematicsResult(
         local_rotations=local_rotations,
         global_rotations=global_rotations,
-        bone_scales=bone_scales_full,
+        scales=scales_full,
     )

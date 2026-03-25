@@ -4,7 +4,9 @@ import argparse
 from pathlib import Path
 
 import torch
+from _work_dir import resolve_checkpoint_reference
 
+from differential_skeletons import SUPPORTED_SKELETONS, build_layer
 from differential_skeletons.fitting import (
     FrameDataset,
     JointLimitPrior,
@@ -12,19 +14,6 @@ from differential_skeletons.fitting import (
     PerspectiveCamera,
     PoseVAE,
     SkeletalFitter,
-)
-from differential_skeletons.models import create_model
-
-SUPPORTED_SKELETONS = (
-    "human36m",
-    "coco",
-    "mpii",
-    "halpe26",
-    "hand21",
-    "face68",
-    "halpe_fullbody",
-    "coco_wholebody",
-    "spinetrack",
 )
 
 
@@ -60,10 +49,11 @@ def _load_priors(
     *,
     skeleton: str,
 ) -> tuple[PoseVAE | None, JointLimitPrior | None]:
-    checkpoint = torch.load(path, map_location="cpu")
+    checkpoint_path = resolve_checkpoint_reference(path)
+    checkpoint = torch.load(checkpoint_path, map_location="cpu")
     if not isinstance(checkpoint, dict):
         raise ValueError(
-            f"Expected a dict checkpoint in {path}, got {type(checkpoint).__name__}."
+            f"Expected a dict checkpoint in {checkpoint_path}, got {type(checkpoint).__name__}."
         )
 
     checkpoint_skeleton = checkpoint.get("skeleton")
@@ -126,14 +116,12 @@ def main() -> None:
         "--priors",
         type=Path,
         default=None,
-        help="Optional path to a prior checkpoint saved by train_prior.py.",
+        help="Optional prior checkpoint path, last_checkpoint file, or work_dir.",
     )
     args = parser.parse_args()
 
-    model = create_model(
-        args.skeleton, create_global_orient=False, create_body_pose=False
-    )
-    dataset = FrameDataset.from_npz(args.dataset, expected_num_joints=model.num_joints)
+    model = build_layer(args.skeleton)
+    dataset = FrameDataset.from_npz(args.dataset, expected_num_joints=model.NUM_JOINTS)
     sample = dataset[args.sample_index]
     pose_prior = None
     joint_limit_prior = None
