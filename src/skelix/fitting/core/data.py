@@ -44,7 +44,7 @@ class FittingDataBatch:
         joints_3d: Input joints in model joint order with shape `[..., J, 3]`.
         body_pose_rot6d: Non-root joint rotations with shape `[..., J - 1, 6]`.
         global_orient_rot6d: Root rotation with shape `[..., 6]`.
-        bone_scales: Per-bone scale factors with shape `[..., J - 1]`.
+        bone_scales: OpenSim-style per-body scale factors with shape `[..., J, 3]`.
     """
 
     joints_3d: torch.Tensor
@@ -124,7 +124,12 @@ class FrameDataset(Dataset[dict[str, torch.Tensor]]):
         """
 
         with np.load(path, allow_pickle=True) as payload:
-            joints_3d = torch.from_numpy(payload['joints_3d']).float()
+            joints_3d_key = 'joints_3d' if 'joints_3d' in payload else 'S' if 'S' in payload else None
+            if joints_3d_key is None:
+                raise ValueError('No joints_3d or S array found in the .npz payload.')
+            joints_3d = torch.from_numpy(payload[joints_3d_key]).float()
+            if joints_3d.shape[-1] == 4:
+                joints_3d = joints_3d[..., :3]
             joints_2d = torch.from_numpy(payload['joints_2d']).float() if 'joints_2d' in payload else None
             confidences = torch.from_numpy(payload['confidences']).float() if 'confidences' in payload else None
             cameras = {
@@ -245,8 +250,8 @@ def prepare_frame_batch(
     Args:
         joints_3d: Joint targets with shape `[..., J, 3]` using `model` order.
         model: Skeleton model defining joint topology and rest offsets.
-        estimate_bone_scales: Whether to estimate per-bone scale factors from
-            the target joints. When `False`, unit bone scales are used.
+        estimate_bone_scales: Whether to estimate per-body scale factors from
+            the target joints. When `False`, unit body scales are used.
 
     Returns:
         A :class:`FittingDataBatch` with root pose, body pose, and scales.
@@ -259,7 +264,7 @@ def prepare_frame_batch(
         bone_scales = estimate_bone_scales_from_joints(joints_3d, model)
     else:
         bone_scales = torch.ones(
-            joints_3d.shape[:-2] + (model.num_joints - 1,),
+            joints_3d.shape[:-2] + (model.num_joints, 3),
             dtype=joints_3d.dtype,
             device=joints_3d.device,
         )
@@ -285,8 +290,8 @@ def prepare_sequence_batch(
         joints_3d: Joint targets with shape `[..., T, J, 3]` using `model`
             order.
         model: Skeleton model defining joint topology and rest offsets.
-        estimate_bone_scales: Whether to estimate per-bone scale factors from
-            the target joints. When `False`, unit bone scales are used.
+        estimate_bone_scales: Whether to estimate per-body scale factors from
+            the target joints. When `False`, unit body scales are used.
 
     Returns:
         A :class:`FittingDataBatch` with root pose, body pose, and scales.
@@ -301,5 +306,5 @@ def prepare_sequence_batch(
         joints_3d=joints_3d.float(),
         body_pose_rot6d=batch.body_pose_rot6d.reshape(seq_shape + batch.body_pose_rot6d.shape[-2:]),
         global_orient_rot6d=batch.global_orient_rot6d.reshape(seq_shape + batch.global_orient_rot6d.shape[-1:]),
-        bone_scales=batch.bone_scales.reshape(seq_shape + (batch.bone_scales.shape[-1],)),
+        bone_scales=batch.bone_scales.reshape(seq_shape + batch.bone_scales.shape[-2:]),
     )

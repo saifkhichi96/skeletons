@@ -90,12 +90,23 @@ def estimate_bone_scales_from_joints(joints: torch.Tensor, model: SkeletalModel,
     if joints.shape[-2:] != (model.num_joints, 3):
         raise ValueError(f'joints must have shape [..., {model.num_joints}, 3].')
 
-    scales = torch.ones(joints.shape[:-2] + (model.num_joints - 1,), dtype=joints.dtype, device=joints.device)
-    for out_idx, joint_idx in enumerate(model.non_root_joint_indices):
-        parent_idx = model.parents[joint_idx]
-        observed = (joints[..., joint_idx, :] - joints[..., parent_idx, :]).norm(dim=-1)
-        rest_length = model.rest_offsets[joint_idx].to(joints).norm()
-        scales[..., out_idx] = observed / rest_length.clamp_min(1e-8)
+    scales = torch.ones(joints.shape[:-2] + (model.num_joints, 3), dtype=joints.dtype, device=joints.device)
+    for body_idx in range(model.num_bodies):
+        child_indices = model.child_body_indices[body_idx]
+        if not child_indices:
+            continue
+        observed_lengths = torch.stack(
+            [(joints[..., child_idx, :] - joints[..., body_idx, :]).norm(dim=-1) for child_idx in child_indices],
+            dim=-1,
+        )
+        rest_lengths = torch.stack(
+            [model.rest_offsets[child_idx].to(joints).norm() for child_idx in child_indices],
+            dim=-1,
+        )
+        # Joint centers alone do not identify full anisotropic body scale robustly,
+        # so the IK initializer uses an isotropic OpenSim-style body scale estimate.
+        isotropic_scale = (observed_lengths / rest_lengths.clamp_min(1e-8)).mean(dim=-1, keepdim=True)
+        scales[..., body_idx, :] = isotropic_scale.expand(joints.shape[:-2] + (3,))
     if clamp is not None:
         scales = scales.clamp(clamp[0], clamp[1])
     return scales
@@ -115,23 +126,15 @@ def estimate_rotations_from_joints(
     device = joints.device
 
     if bone_scales is None:
-        bone_scales_full = model._canonicalize_bone_scales(None, dtype=dtype, device=device)
-        bone_scales_full = bone_scales_full.expand(batch_shape + (model.num_joints,)).clone()
-        estimated_non_root = estimate_bone_scales_from_joints(joints, model)
-        bone_scales_full[..., list(model.non_root_joint_indices)] = estimated_non_root
+        bone_scales_full = estimate_bone_scales_from_joints(joints, model)
     else:
         bone_scales_full = model._canonicalize_bone_scales(bone_scales, dtype=dtype, device=device)
-        if bone_scales_full.shape[:-1] != batch_shape:
-            bone_scales_full = bone_scales_full.expand(batch_shape + (model.num_joints,))
+        if bone_scales_full.shape[:-2] != batch_shape:
+            bone_scales_full = bone_scales_full.expand(batch_shape + (model.num_joints, 3))
 
     global_rotations = torch.zeros(batch_shape + (model.num_joints, 3, 3), dtype=dtype, device=device)
     local_rotations = torch.zeros_like(global_rotations)
     identity = torch.eye(3, dtype=dtype, device=device).expand(batch_shape + (3, 3))
-
-    children = [[] for _ in range(model.num_joints)]
-    for child_idx, parent_idx in enumerate(model.parents):
-        if parent_idx >= 0:
-            children[parent_idx].append(child_idx)
 
     scaled_offsets = model._scaled_offsets(
         bone_scales_full,
@@ -141,7 +144,7 @@ def estimate_rotations_from_joints(
     )
 
     for joint_idx in model.topological_order:
-        child_indices = children[joint_idx]
+        child_indices = model.child_body_indices[joint_idx]
         if not child_indices:
             if model.parents[joint_idx] == -1:
                 global_rotations[..., joint_idx, :, :] = identity
@@ -170,5 +173,5 @@ def estimate_rotations_from_joints(
     return InverseKinematicsResult(
         local_rotations=local_rotations,
         global_rotations=global_rotations,
-        bone_scales=bone_scales_full[..., list(model.non_root_joint_indices)],
+        bone_scales=bone_scales_full,
     )

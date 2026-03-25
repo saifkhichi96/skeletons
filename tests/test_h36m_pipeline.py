@@ -25,7 +25,7 @@ def _make_synthetic_batch(batch_size: int = 8) -> tuple[Human36MModel, torch.Ten
     body_pose = torch.randn(batch_size, model.num_joints - 1, 6, generator=generator) * 0.05
     body_pose[..., 0] += 1.0
     body_pose[..., 4] += 1.0
-    bone_scales = torch.ones(batch_size, model.num_joints - 1)
+    bone_scales = torch.ones(batch_size, model.num_joints, 3)
     transl = torch.randn(batch_size, 3, generator=generator) * 25.0
     transl[..., 2] += 2500.0
     joints = model(

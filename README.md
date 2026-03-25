@@ -1,6 +1,6 @@
 # skelix
 
-`skelix` is a lightweight PyTorch package for differentiable skeletal kinematics. It is intended for use cases that need a reusable articulated-body module without a skinned surface model: FK-based losses, pose regularization, skeleton retargeting, canonical rest-pose animation, optimization over bone-length multipliers, and skeleton-native prior learning.
+`skelix` is a lightweight PyTorch package for differentiable skeletal kinematics. It is intended for use cases that need a reusable articulated-body module without a skinned surface model: FK-based losses, pose regularization, skeleton retargeting, canonical rest-pose animation, optimization over OpenSim-style body scale factors, and skeleton-native prior learning.
 
 The public API is deliberately close to the interaction style of `smplx`: models can own default parameters (`global_orient`, `body_pose`, `bone_scales`, `transl`) but explicit per-call tensors always override the stored state.
 
@@ -9,7 +9,7 @@ The public API is deliberately close to the interaction style of `smplx`: models
 - A generic `SkeletalModel` base class with differentiable forward kinematics.
 - Split-pose and full-pose inputs.
 - Axis-angle, quaternion, 6D, and rotation-matrix pose representations.
-- Optional learnable or frozen per-bone length multipliers.
+- Optional learnable or frozen OpenSim-style per-body scale factors.
 - Canonical template rigs for:
   - COCO
   - MPII
@@ -103,7 +103,8 @@ The Human3.6M stack expects dataset-style arrays with the official 17-joint orde
 - Full-body rigs use a neutral adult T-pose.
 - Hand rigs use an open-hand neutral pose.
 - Face rigs use a neutral frontal landmark template.
-- `bone_scales` are multiplicative per-bone length factors, not SMPL-style latent shape coefficients.
+- `bone_scales` follow an OpenSim-like body-scaling convention: each body can carry an isotropic scalar or an anisotropic `x/y/z` scale, and child joint offsets are scaled in the parent body's local frame.
+- Passing `[..., J - 1]` or `[..., J]` scale tensors remains supported as isotropic shorthand; passing `[..., J - 1, 3]` or `[..., J, 3]` enables explicit per-axis body scaling.
 
 This makes the package suitable for FK losses and optimization, but the templates should be treated as canonical priors rather than dataset ground truth.
 

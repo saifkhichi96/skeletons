@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -36,6 +37,103 @@ def _make_transform(rotation: torch.Tensor, translation: torch.Tensor) -> torch.
     return transform
 
 
+@dataclass(frozen=True)
+class ArticulatedJoint:
+    index: int
+    name: str
+    joint_type: str
+    parent_body_index: int | None
+    child_body_index: int
+    pose_index: int
+    body_scale_index: int
+
+
+@dataclass(frozen=True)
+class RigidBodyNode:
+    index: int
+    name: str
+    parent_index: int | None
+    incoming_joint_index: int
+    child_body_indices: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ArticulatedSkeleton:
+    name: str
+    root_body_index: int
+    body_nodes: tuple[RigidBodyNode, ...]
+    joints: tuple[ArticulatedJoint, ...]
+    topological_order: tuple[int, ...]
+
+    @classmethod
+    def from_spec(cls, spec: SkeletonSpec) -> ArticulatedSkeleton:
+        parents = tuple(int(parent) for parent in spec.parents)
+        roots = [idx for idx, parent in enumerate(parents) if parent == -1]
+        if len(roots) != 1:
+            raise ValueError(f'Exactly one root is required, got {roots}.')
+        root_body_index = roots[0]
+        if root_body_index != int(spec.root_index):
+            raise ValueError(f'Spec root_index {spec.root_index} does not match tree root {root_body_index}.')
+
+        children = [[] for _ in parents]
+        for child_idx, parent_idx in enumerate(parents):
+            if parent_idx == -1:
+                continue
+            if parent_idx < 0 or parent_idx >= len(parents):
+                raise ValueError(f'Invalid parent index {parent_idx} for joint {child_idx}.')
+            children[parent_idx].append(child_idx)
+
+        topological_order = cls._compute_topological_order(root_body_index, children)
+
+        body_nodes = tuple(
+            RigidBodyNode(
+                index=body_idx,
+                name=spec.joint_names[body_idx],
+                parent_index=None if parents[body_idx] == -1 else parents[body_idx],
+                incoming_joint_index=body_idx,
+                child_body_indices=tuple(children[body_idx]),
+            )
+            for body_idx in range(len(parents))
+        )
+        joints = tuple(
+            ArticulatedJoint(
+                index=body_idx,
+                name=spec.joint_names[body_idx],
+                joint_type='free' if parents[body_idx] == -1 else 'ball',
+                parent_body_index=None if parents[body_idx] == -1 else parents[body_idx],
+                child_body_index=body_idx,
+                pose_index=body_idx,
+                body_scale_index=body_idx,
+            )
+            for body_idx in range(len(parents))
+        )
+
+        return cls(
+            name=spec.name,
+            root_body_index=root_body_index,
+            body_nodes=body_nodes,
+            joints=joints,
+            topological_order=topological_order,
+        )
+
+    @staticmethod
+    def _compute_topological_order(root_body_index: int, children: list[list[int]]) -> tuple[int, ...]:
+        order: list[int] = []
+        stack = [root_body_index]
+        visited: set[int] = set()
+        while stack:
+            body_idx = stack.pop()
+            if body_idx in visited:
+                continue
+            visited.add(body_idx)
+            order.append(body_idx)
+            stack.extend(reversed(children[body_idx]))
+
+        if len(order) != len(children):
+            raise ValueError('The articulated skeleton must be a connected tree.')
+        return tuple(order)
+
+
 class SkeletalModel(nn.Module):
     def __init__(
         self,
@@ -60,13 +158,27 @@ class SkeletalModel(nn.Module):
 
         self.pose_repr = normalize_pose_repr(pose_repr)
         self.spec = spec
+        self.skeleton = ArticulatedSkeleton.from_spec(spec)
+        self.body_nodes = self.skeleton.body_nodes
+        self.joints = self.skeleton.joints
         self.joint_names = tuple(spec.joint_names)
-        self.parents = tuple(int(parent) for parent in spec.parents)
+        self.parents = tuple(-1 if body.parent_index is None else body.parent_index for body in self.body_nodes)
+        self.child_body_indices = tuple(body.child_body_indices for body in self.body_nodes)
         self.root_index = int(spec.root_index)
         self.num_joints = len(self.joint_names)
+        self.num_bodies = len(self.body_nodes)
         self.non_root_joint_indices = tuple(idx for idx in range(self.num_joints) if idx != self.root_index)
         self.joint_name_to_index = {name: idx for idx, name in enumerate(self.joint_names)}
-        self.topological_order = self._compute_topological_order(self.parents)
+        self.topological_order = self.skeleton.topological_order
+        offset_scale_body_indices = [self.root_index] * self.num_joints
+        for joint_idx, parent_idx in enumerate(self.parents):
+            if parent_idx != -1:
+                offset_scale_body_indices[joint_idx] = parent_idx
+        self.register_buffer(
+            'offset_scale_body_indices',
+            torch.tensor(offset_scale_body_indices, dtype=torch.long),
+            persistent=False,
+        )
 
         rest_offsets = spec.rest_offsets.detach().clone().to(dtype=dtype)
         self.register_buffer('rest_offsets', rest_offsets)
@@ -88,7 +200,7 @@ class SkeletalModel(nn.Module):
         self._register_optional_state(
             name='bone_scales',
             value=bone_scales,
-            default=torch.ones(self.num_joints - 1, dtype=dtype),
+            default=torch.ones(self.num_joints, 3, dtype=dtype),
             create=create_bone_scales,
             learn=learn_bone_scales,
         )
@@ -99,35 +211,6 @@ class SkeletalModel(nn.Module):
             create=create_transl,
             learn=learn_transl,
         )
-
-    @staticmethod
-    def _compute_topological_order(parents: tuple[int, ...]) -> tuple[int, ...]:
-        roots = [idx for idx, parent in enumerate(parents) if parent == -1]
-        if len(roots) != 1:
-            raise ValueError(f'Exactly one root is required, got {roots}.')
-        root = roots[0]
-        children = [[] for _ in parents]
-        for child, parent in enumerate(parents):
-            if parent == -1:
-                continue
-            if parent < 0 or parent >= len(parents):
-                raise ValueError(f'Invalid parent index {parent} for joint {child}.')
-            children[parent].append(child)
-
-        order: list[int] = []
-        stack = [root]
-        visited = set()
-        while stack:
-            node = stack.pop()
-            if node in visited:
-                continue
-            visited.add(node)
-            order.append(node)
-            stack.extend(reversed(children[node]))
-
-        if len(order) != len(parents):
-            raise ValueError('The skeleton graph must be a connected tree.')
-        return tuple(order)
 
     def _register_optional_state(
         self,
@@ -150,6 +233,14 @@ class SkeletalModel(nn.Module):
     def joint_index(self, name: str) -> int:
         return self.joint_name_to_index[name]
 
+    def get_body_node(self, body: int | str) -> RigidBodyNode:
+        body_index = self.joint_index(body) if isinstance(body, str) else body
+        return self.body_nodes[body_index]
+
+    def get_joint(self, joint: int | str) -> ArticulatedJoint:
+        joint_index = self.joint_index(joint) if isinstance(joint, str) else joint
+        return self.joints[joint_index]
+
     def has_state(self, name: str) -> bool:
         return hasattr(self, name)
 
@@ -171,13 +262,14 @@ class SkeletalModel(nn.Module):
 
     def rest_joints(self, bone_scales: torch.Tensor | None = None) -> torch.Tensor:
         scales = self._canonicalize_bone_scales(bone_scales, dtype=self.rest_offsets.dtype, device=self.rest_offsets.device)
-        scaled_offsets = self._scaled_offsets(scales, batch_shape=scales.shape[:-1], dtype=self.rest_offsets.dtype, device=self.rest_offsets.device)
+        scaled_offsets = self._scaled_offsets(scales, batch_shape=scales.shape[:-2], dtype=self.rest_offsets.dtype, device=self.rest_offsets.device)
         joints = torch.zeros(scaled_offsets.shape, dtype=scaled_offsets.dtype, device=scaled_offsets.device)
-        for joint_idx in self.topological_order:
-            parent_idx = self.parents[joint_idx]
-            if parent_idx == -1:
+        for body_idx in self.topological_order:
+            body = self.body_nodes[body_idx]
+            incoming_joint = self.joints[body.incoming_joint_index]
+            if incoming_joint.parent_body_index is None:
                 continue
-            joints[..., joint_idx, :] = joints[..., parent_idx, :] + scaled_offsets[..., joint_idx, :]
+            joints[..., body_idx, :] = joints[..., incoming_joint.parent_body_index, :] + scaled_offsets[..., body_idx, :]
         return joints
 
     def _reshape_global_orient(self, value: torch.Tensor, pose_repr: str) -> torch.Tensor:
@@ -197,8 +289,6 @@ class SkeletalModel(nn.Module):
             return value
         if value.shape[-1] == feat:
             return value.unsqueeze(-2)
-        if value.shape[-1] == feat:
-            return value
         raise ValueError(f'global_orient must end with {feat}, got {tuple(value.shape)}.')
 
     def _reshape_joint_pose(self, value: torch.Tensor, num_joints: int, pose_repr: str) -> torch.Tensor:
@@ -237,27 +327,30 @@ class SkeletalModel(nn.Module):
         device: torch.device,
     ) -> torch.Tensor:
         if bone_scales is None:
-            return torch.ones(self.num_joints, dtype=dtype, device=device)
+            return torch.ones(self.num_joints, 3, dtype=dtype, device=device)
 
         value = bone_scales.to(dtype=dtype, device=device)
+        if value.ndim >= 2 and value.shape[-2:] == (self.num_joints, 3):
+            return value.clone()
+        if value.ndim >= 2 and value.shape[-2:] == (self.num_joints - 1, 3):
+            full = torch.ones(value.shape[:-2] + (self.num_joints, 3), dtype=dtype, device=device)
+            full[..., list(self.non_root_joint_indices), :] = value
+            return full
         if value.ndim == 1 and value.shape[0] == self.num_joints - 1:
-            full = torch.ones(self.num_joints, dtype=dtype, device=device)
-            full[list(self.non_root_joint_indices)] = value
+            full = torch.ones(self.num_joints, 3, dtype=dtype, device=device)
+            full[list(self.non_root_joint_indices), :] = value.unsqueeze(-1).expand(self.num_joints - 1, 3)
             return full
         if value.shape[-1] == self.num_joints - 1:
-            full = torch.ones(value.shape[:-1] + (self.num_joints,), dtype=dtype, device=device)
-            full[..., list(self.non_root_joint_indices)] = value
+            full = torch.ones(value.shape[:-1] + (self.num_joints, 3), dtype=dtype, device=device)
+            full[..., list(self.non_root_joint_indices), :] = value.unsqueeze(-1).expand(value.shape + (3,))
             return full
         if value.ndim == 1 and value.shape[0] == self.num_joints:
-            full = value.clone()
-            full[self.root_index] = 1.0
-            return full
+            return value.unsqueeze(-1).expand(self.num_joints, 3).clone()
         if value.shape[-1] == self.num_joints:
-            full = value.clone()
-            full[..., self.root_index] = 1.0
-            return full
+            return value.unsqueeze(-1).expand(value.shape + (3,)).clone()
         raise ValueError(
-            f'bone_scales must end in {self.num_joints - 1} or {self.num_joints}, got {tuple(value.shape)}.'
+            'bone_scales must have shape [..., J], [..., J - 1], [..., J, 3], or [..., J - 1, 3] '
+            f'with J={self.num_joints}, got {tuple(value.shape)}.'
         )
 
     def _scaled_offsets(
@@ -271,8 +364,11 @@ class SkeletalModel(nn.Module):
         offsets = self.rest_offsets.to(dtype=dtype, device=device)
         scales = bone_scales.to(dtype=dtype, device=device)
         offsets = _expand_to_batch(offsets, batch_shape, tail_dims=2)
-        scales = _expand_to_batch(scales, batch_shape, tail_dims=1)
-        scaled = offsets * scales.unsqueeze(-1)
+        scales = _expand_to_batch(scales, batch_shape, tail_dims=2)
+        scale_owner_indices = self.offset_scale_body_indices.to(device=device)
+        # OpenSim-style scaling applies joint locations in the parent body's local frame.
+        owner_scales = torch.index_select(scales, dim=-2, index=scale_owner_indices)
+        scaled = offsets * owner_scales
         scaled[..., self.root_index, :] = 0.0
         return scaled
 
@@ -340,6 +436,8 @@ class SkeletalModel(nn.Module):
         device = local_rotations.device
 
         bone_scales_full = self._canonicalize_bone_scales(bone_scales, dtype=dtype, device=device)
+        if bone_scales_full.shape[:-2] != batch_shape:
+            bone_scales_full = bone_scales_full.expand(batch_shape + (self.num_joints, 3))
         scaled_offsets = self._scaled_offsets(bone_scales_full, batch_shape=batch_shape, dtype=dtype, device=device)
 
         if transl is None:
@@ -353,29 +451,31 @@ class SkeletalModel(nn.Module):
         local_transform_list: list[torch.Tensor | None] | None = [None] * self.num_joints if return_local_transforms else None
         global_transform_list: list[torch.Tensor | None] | None = [None] * self.num_joints if return_global_transforms else None
 
-        for joint_idx in self.topological_order:
-            parent_idx = self.parents[joint_idx]
-            local_rotation = local_rotations[..., joint_idx, :, :]
-            if parent_idx == -1:
+        for body_idx in self.topological_order:
+            body = self.body_nodes[body_idx]
+            joint = self.joints[body.incoming_joint_index]
+            local_rotation = local_rotations[..., joint.pose_index, :, :]
+
+            if joint.parent_body_index is None:
+                local_translation = transl_value
                 position = transl_value
                 global_rotation = local_rotation
             else:
-                parent_rot = global_rotation_list[parent_idx]
-                parent_pos = joint_positions[parent_idx]
+                parent_rot = global_rotation_list[joint.parent_body_index]
+                parent_pos = joint_positions[joint.parent_body_index]
                 assert parent_rot is not None and parent_pos is not None
-                joint_offset = scaled_offsets[..., joint_idx, :]
-                offset_world = (parent_rot @ joint_offset.unsqueeze(-1)).squeeze(-1)
+                local_translation = scaled_offsets[..., joint.child_body_index, :]
+                offset_world = (parent_rot @ local_translation.unsqueeze(-1)).squeeze(-1)
                 position = parent_pos + offset_world
                 global_rotation = parent_rot @ local_rotation
 
-            joint_positions[joint_idx] = position
-            global_rotation_list[joint_idx] = global_rotation
+            joint_positions[body_idx] = position
+            global_rotation_list[body_idx] = global_rotation
 
             if local_transform_list is not None:
-                local_translation = transl_value if parent_idx == -1 else scaled_offsets[..., joint_idx, :]
-                local_transform_list[joint_idx] = _make_transform(local_rotation, local_translation)
+                local_transform_list[body_idx] = _make_transform(local_rotation, local_translation)
             if global_transform_list is not None:
-                global_transform_list[joint_idx] = _make_transform(global_rotation, position)
+                global_transform_list[body_idx] = _make_transform(global_rotation, position)
 
         joints = torch.stack([value for value in joint_positions if value is not None], dim=-2)
         global_rotations = torch.stack([value for value in global_rotation_list if value is not None], dim=-3)
