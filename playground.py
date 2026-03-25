@@ -27,7 +27,7 @@ except (ImportError, ModuleNotFoundError) as exc:
         "then run `python playground.py`."
     ) from exc
 
-from skelix import (
+from differential_skeletons import (
     CocoModel,
     CocoWholeBodyModel,
     Face68Model,
@@ -38,8 +38,15 @@ from skelix import (
     MPIIModel,
     SpineTrackModel,
 )
-from skelix.fitting import FrameDataset, JointLimitPrior, JointLimitStatistics, PerspectiveCamera, PoseVAE, SkeletalFitter
-from skelix.rotations import matrix_to_axis_angle
+from differential_skeletons.fitting import (
+    FrameDataset,
+    JointLimitPrior,
+    JointLimitStatistics,
+    PerspectiveCamera,
+    PoseVAE,
+    SkeletalFitter,
+)
+from differential_skeletons.rotations import matrix_to_axis_angle
 
 
 def softlight_shader() -> gl.shaders.ShaderProgram:
@@ -144,16 +151,14 @@ SCENE_TO_VIEW = np.array(
 
 
 def _normalize_skeleton_name(name: str) -> str:
-    return name.lower().replace('-', '_')
+    return name.lower().replace("-", "_")
 
 
 def _infer_pose_prior_config(state_dict: dict[str, torch.Tensor]) -> dict[str, int]:
     linear_keys = sorted(
         key
         for key, value in state_dict.items()
-        if key.startswith("encoder.")
-        and key.endswith(".weight")
-        and value.ndim == 2
+        if key.startswith("encoder.") and key.endswith(".weight") and value.ndim == 2
     )
     if not linear_keys:
         raise ValueError("Could not infer PoseVAE architecture from the checkpoint.")
@@ -162,7 +167,9 @@ def _infer_pose_prior_config(state_dict: dict[str, torch.Tensor]) -> dict[str, i
     hidden_dim = int(state_dict[linear_keys[0]].shape[0])
     latent_dim = int(state_dict["encoder_mu.weight"].shape[0])
     if input_dim % 6 != 0:
-        raise ValueError(f"PoseVAE input dimension must be divisible by 6, got {input_dim}.")
+        raise ValueError(
+            f"PoseVAE input dimension must be divisible by 6, got {input_dim}."
+        )
     return {
         "num_joints": input_dim // 6,
         "latent_dim": latent_dim,
@@ -178,10 +185,14 @@ def _load_priors(
 ) -> tuple[PoseVAE | None, JointLimitPrior | None]:
     checkpoint = torch.load(path, map_location="cpu")
     if not isinstance(checkpoint, dict):
-        raise ValueError(f"Expected a dict checkpoint in {path}, got {type(checkpoint).__name__}.")
+        raise ValueError(
+            f"Expected a dict checkpoint in {path}, got {type(checkpoint).__name__}."
+        )
 
     checkpoint_skeleton = checkpoint.get("skeleton")
-    if checkpoint_skeleton is not None and _normalize_skeleton_name(str(checkpoint_skeleton)) != _normalize_skeleton_name(skeleton):
+    if checkpoint_skeleton is not None and _normalize_skeleton_name(
+        str(checkpoint_skeleton)
+    ) != _normalize_skeleton_name(skeleton):
         raise ValueError(
             f"Prior checkpoint skeleton {checkpoint_skeleton!r} does not match requested skeleton {skeleton!r}.",
         )
@@ -377,7 +388,16 @@ def generate_walk_cycle(source, time_s: float) -> tuple[torch.Tensor, torch.Tens
     phase = (2.0 * math.pi * time_s) / 1.25
     pose, translation = _make_animation_buffers(model)
 
-    _set_axis_angle(pose, model, model.joint_names[model.root_index], (0.03 * math.sin(phase * 2.0), 0.05 * math.sin(phase), 0.03 * math.sin(phase + math.pi / 2.0)))
+    _set_axis_angle(
+        pose,
+        model,
+        model.joint_names[model.root_index],
+        (
+            0.03 * math.sin(phase * 2.0),
+            0.05 * math.sin(phase),
+            0.03 * math.sin(phase + math.pi / 2.0),
+        ),
+    )
 
     swing = math.sin(phase)
     support = math.sin(phase + math.pi)
@@ -393,8 +413,12 @@ def generate_walk_cycle(source, time_s: float) -> tuple[torch.Tensor, torch.Tens
 
     _set_axis_angle(pose, model, "left_shoulder", (0.28 * swing, 0.0, 0.0))
     _set_axis_angle(pose, model, "right_shoulder", (-0.28 * swing, 0.0, 0.0))
-    _set_axis_angle(pose, model, "left_elbow", (-0.12 - 0.08 * max(0.0, support), 0.0, 0.0))
-    _set_axis_angle(pose, model, "right_elbow", (-0.12 - 0.08 * max(0.0, -support), 0.0, 0.0))
+    _set_axis_angle(
+        pose, model, "left_elbow", (-0.12 - 0.08 * max(0.0, support), 0.0, 0.0)
+    )
+    _set_axis_angle(
+        pose, model, "right_elbow", (-0.12 - 0.08 * max(0.0, -support), 0.0, 0.0)
+    )
     _set_axis_angle(pose, model, "spine", (0.04 * math.sin(phase + 0.6), 0.0, 0.0))
     _set_axis_angle(pose, model, "thorax", (0.05 * math.sin(phase + 0.3), 0.0, 0.0))
     _set_axis_angle(pose, model, "neck_base", (0.03 * math.sin(phase), 0.0, 0.0))
@@ -409,8 +433,12 @@ def generate_arm_wave(source, time_s: float) -> tuple[torch.Tensor, torch.Tensor
     phase = (2.0 * math.pi * time_s) / 1.6
     pose, translation = _make_animation_buffers(model)
     _set_axis_angle(pose, model, "right_shoulder", (-0.25, 0.0, -0.95))
-    _set_axis_angle(pose, model, "right_elbow", (-0.35 - 0.20 * math.sin(phase), 0.0, 0.0))
-    _set_axis_angle(pose, model, "right_wrist", (0.35 * math.sin(phase * 2.0), 0.0, 0.0))
+    _set_axis_angle(
+        pose, model, "right_elbow", (-0.35 - 0.20 * math.sin(phase), 0.0, 0.0)
+    )
+    _set_axis_angle(
+        pose, model, "right_wrist", (0.35 * math.sin(phase * 2.0), 0.0, 0.0)
+    )
     _set_axis_angle(pose, model, "left_shoulder", (0.10, 0.0, 0.18))
     _set_axis_angle(pose, model, "left_elbow", (-0.10, 0.0, 0.0))
     _set_axis_angle(pose, model, "thorax", (0.03 * math.sin(phase), 0.0, -0.04))
@@ -438,8 +466,12 @@ def generate_finger_wave(source, time_s: float) -> tuple[torch.Tensor, torch.Ten
                 spread = 0.08 * math.sin(phase * 0.5 + offset)
                 _set_axis_angle(pose, model, joint_name, (curl, spread, 0.0))
     _set_axis_angle(pose, model, "wrist", (0.10 * math.sin(phase * 0.5), 0.0, 0.0))
-    _set_axis_angle(pose, model, "left_hand_root", (0.08 * math.sin(phase * 0.5), 0.0, 0.0))
-    _set_axis_angle(pose, model, "right_hand_root", (-0.08 * math.sin(phase * 0.5), 0.0, 0.0))
+    _set_axis_angle(
+        pose, model, "left_hand_root", (0.08 * math.sin(phase * 0.5), 0.0, 0.0)
+    )
+    _set_axis_angle(
+        pose, model, "right_hand_root", (-0.08 * math.sin(phase * 0.5), 0.0, 0.0)
+    )
     return pose, translation
 
 
@@ -464,12 +496,19 @@ def generate_rom_wander(source, time_s: float) -> tuple[torch.Tensor, torch.Tens
 
             phase_seed = _stable_phase_seed(f"{joint_name}:{axis}")
             primary_frequency = 0.10 + 0.02 * ((joint_index + axis) % 7)
-            secondary_frequency = primary_frequency * (1.7 + 0.15 * ((joint_index + axis) % 3))
+            secondary_frequency = primary_frequency * (
+                1.7 + 0.15 * ((joint_index + axis) % 3)
+            )
             waveform = (
                 math.sin(2.0 * math.pi * primary_frequency * time_s + phase_seed)
-                + 0.35 * math.sin(2.0 * math.pi * secondary_frequency * time_s + phase_seed * 0.6)
+                + 0.35
+                * math.sin(
+                    2.0 * math.pi * secondary_frequency * time_s + phase_seed * 0.6
+                )
             ) / 1.35
-            pose[joint_index, axis] = math.radians(center_deg + amplitude_deg * waveform)
+            pose[joint_index, axis] = math.radians(
+                center_deg + amplitude_deg * waveform
+            )
 
     if getattr(source, "model", None) is not None:
         translation[1] = 0.02 * math.sin(2.0 * math.pi * time_s * 0.24)
@@ -496,21 +535,37 @@ ANIMATION_PRESETS = (
         key="walk_cycle",
         label="Walk Cycle",
         period=1.25,
-        matcher=lambda model: _has_joints(model, "left_hip", "left_knee", "right_hip", "right_knee"),
+        matcher=lambda model: _has_joints(
+            model, "left_hip", "left_knee", "right_hip", "right_knee"
+        ),
         generator=generate_walk_cycle,
     ),
     AnimationPreset(
         key="arm_wave",
         label="Arm Wave",
         period=1.6,
-        matcher=lambda model: _has_joints(model, "right_shoulder", "right_elbow") or _has_joints(model, "left_shoulder", "left_elbow"),
+        matcher=lambda model: (
+            _has_joints(model, "right_shoulder", "right_elbow")
+            or _has_joints(model, "left_shoulder", "left_elbow")
+        ),
         generator=generate_arm_wave,
     ),
     AnimationPreset(
         key="finger_wave",
         label="Finger Wave",
         period=1.8,
-        matcher=lambda model: _has_any_prefix(model, ("thumb", "forefinger", "middle_finger", "ring_finger", "pinky_finger", "left_thumb", "right_thumb")),
+        matcher=lambda model: _has_any_prefix(
+            model,
+            (
+                "thumb",
+                "forefinger",
+                "middle_finger",
+                "ring_finger",
+                "pinky_finger",
+                "left_thumb",
+                "right_thumb",
+            ),
+        ),
         generator=generate_finger_wave,
     ),
 )
@@ -589,7 +644,9 @@ def build_walk_tensors(model) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         dtype=dtype,
         device=device,
     )
-    body_pose = torch.zeros(num_frames, model.num_joints - 1, 3, dtype=dtype, device=device)
+    body_pose = torch.zeros(
+        num_frames, model.num_joints - 1, 3, dtype=dtype, device=device
+    )
     body_pose_indices = {
         model.joint_names[joint_index]: body_pose_index
         for body_pose_index, joint_index in enumerate(model.non_root_joint_indices)
@@ -636,7 +693,9 @@ class FloatSlider(QtWidgets.QWidget):
         header.setContentsMargins(0, 0, 0, 0)
         self.title_label = QtWidgets.QLabel(title)
         self.value_label = QtWidgets.QLabel()
-        self.value_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.value_label.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
         header.addWidget(self.title_label)
         header.addStretch(1)
         header.addWidget(self.value_label)
@@ -666,7 +725,9 @@ class FloatSlider(QtWidgets.QWidget):
     def set_range(self, minimum: float, maximum: float) -> None:
         self.minimum = minimum
         self.maximum = maximum
-        self.slider.setRange(int(round(minimum * self.factor)), int(round(maximum * self.factor)))
+        self.slider.setRange(
+            int(round(minimum * self.factor)), int(round(maximum * self.factor))
+        )
         self.set_value(self.value(), emit=False)
 
     def _format(self, value: float) -> str:
@@ -719,7 +780,9 @@ class AxisGizmoOverlay(QtWidgets.QWidget):
             depth = float(np.dot(axis_vector, basis["forward"]))
             axis_draw_data.append((depth, label, direction_2d, AXIS_COLORS[label]))
 
-        for depth, label, direction_2d, color in sorted(axis_draw_data, key=lambda item: item[0]):
+        for depth, label, direction_2d, color in sorted(
+            axis_draw_data, key=lambda item: item[0]
+        ):
             alpha = 255 if depth >= 0.0 else 150
             draw_color = QtGui.QColor(color)
             draw_color.setAlpha(alpha)
@@ -776,7 +839,9 @@ class AxisGizmoOverlay(QtWidgets.QWidget):
         )
         normal = np.array([-direction[1], direction[0]], dtype=float)
 
-        pen = QtGui.QPen(color, 6.0, QtCore.Qt.PenStyle.SolidLine, QtCore.Qt.PenCapStyle.RoundCap)
+        pen = QtGui.QPen(
+            color, 6.0, QtCore.Qt.PenStyle.SolidLine, QtCore.Qt.PenCapStyle.RoundCap
+        )
         pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
         painter.drawLine(origin, shaft)
@@ -824,7 +889,9 @@ class ProjectionPreview(QtWidgets.QWidget):
         self.update()
 
     def set_predicted_points(self, points: np.ndarray | None) -> None:
-        self.predicted_points = None if points is None else np.asarray(points, dtype=float)
+        self.predicted_points = (
+            None if points is None else np.asarray(points, dtype=float)
+        )
         self.update()
 
     def clear(self) -> None:
@@ -845,19 +912,31 @@ class ProjectionPreview(QtWidgets.QWidget):
         content = frame.adjusted(14, 34, -14, -14)
         self._draw_legend(painter, frame)
 
-        point_sets = [points for points in (self.target_points, self.predicted_points) if points is not None and len(points) > 0]
+        point_sets = [
+            points
+            for points in (self.target_points, self.predicted_points)
+            if points is not None and len(points) > 0
+        ]
         if not point_sets:
             painter.setPen(QtGui.QColor(110, 117, 130))
-            painter.drawText(content, QtCore.Qt.AlignmentFlag.AlignCenter, "Load a dataset sample to preview 2D fitting.")
+            painter.drawText(
+                content,
+                QtCore.Qt.AlignmentFlag.AlignCenter,
+                "Load a dataset sample to preview 2D fitting.",
+            )
             return
 
         stacked = np.concatenate(point_sets, axis=0)
         mins = stacked.min(axis=0)
         maxs = stacked.max(axis=0)
         extent = np.maximum(maxs - mins, 1.0)
-        scale = min(content.width() / float(extent[0]), content.height() / float(extent[1]))
+        scale = min(
+            content.width() / float(extent[0]), content.height() / float(extent[1])
+        )
         center = (mins + maxs) * 0.5
-        canvas_center = np.array([content.center().x(), content.center().y()], dtype=float)
+        canvas_center = np.array(
+            [content.center().x(), content.center().y()], dtype=float
+        )
 
         def map_point(point: np.ndarray) -> QtCore.QPointF:
             mapped = (point - center) * scale + canvas_center
@@ -885,11 +964,29 @@ class ProjectionPreview(QtWidgets.QWidget):
     def _draw_legend(self, painter: QtGui.QPainter, frame: QtCore.QRect) -> None:
         legend_rect = frame.adjusted(12, 8, -12, -frame.height() + 28)
         painter.setPen(QtGui.QColor(29, 29, 31))
-        painter.drawText(legend_rect, QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter, "Projection Preview")
+        painter.drawText(
+            legend_rect,
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
+            "Projection Preview",
+        )
 
         x = legend_rect.right() - 140
-        self._draw_legend_entry(painter, x, legend_rect.center().y(), PREVIEW_TARGET_COLOR, "Target", dashed=True)
-        self._draw_legend_entry(painter, x + 72, legend_rect.center().y(), PREVIEW_PREDICTION_COLOR, "Prediction", dashed=False)
+        self._draw_legend_entry(
+            painter,
+            x,
+            legend_rect.center().y(),
+            PREVIEW_TARGET_COLOR,
+            "Target",
+            dashed=True,
+        )
+        self._draw_legend_entry(
+            painter,
+            x + 72,
+            legend_rect.center().y(),
+            PREVIEW_PREDICTION_COLOR,
+            "Prediction",
+            dashed=False,
+        )
 
     def _draw_legend_entry(
         self,
@@ -901,7 +998,11 @@ class ProjectionPreview(QtWidgets.QWidget):
         *,
         dashed: bool,
     ) -> None:
-        pen = QtGui.QPen(color, 2.0, QtCore.Qt.PenStyle.DashLine if dashed else QtCore.Qt.PenStyle.SolidLine)
+        pen = QtGui.QPen(
+            color,
+            2.0,
+            QtCore.Qt.PenStyle.DashLine if dashed else QtCore.Qt.PenStyle.SolidLine,
+        )
         painter.setPen(pen)
         painter.drawLine(x, y, x + 16, y)
         painter.setPen(QtGui.QColor(110, 117, 130))
@@ -927,7 +1028,9 @@ class ProjectionPreview(QtWidgets.QWidget):
         for joint_index, parent_index in enumerate(self.parents):
             if parent_index < 0:
                 continue
-            painter.drawLine(map_point(points[parent_index]), map_point(points[joint_index]))
+            painter.drawLine(
+                map_point(points[parent_index]), map_point(points[joint_index])
+            )
 
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(joint_color)
@@ -982,7 +1085,9 @@ class FittingWorker(QtCore.QObject):
             pose_prior = None
             joint_limit_prior = None
             if self.priors_path is not None:
-                pose_prior, joint_limit_prior = _load_priors(self.priors_path, skeleton=model.spec.name)
+                pose_prior, joint_limit_prior = _load_priors(
+                    self.priors_path, skeleton=model.spec.name
+                )
             fitter = SkeletalFitter(
                 model=model,
                 pose_prior=pose_prior,
@@ -1004,7 +1109,12 @@ class FittingWorker(QtCore.QObject):
 
                 sample = self._slice_frame(frame_index)
 
-                def on_progress(step: int, total: int, joints: torch.Tensor, losses: dict[str, float]) -> bool:
+                def on_progress(
+                    step: int,
+                    total: int,
+                    joints: torch.Tensor,
+                    losses: dict[str, float],
+                ) -> bool:
                     joints_np = joints.squeeze(0).detach().cpu().numpy()
                     frame_joints[frame_index] = joints_np
                     self.progress.emit(
@@ -1040,7 +1150,9 @@ class FittingWorker(QtCore.QObject):
                     )
                 elif self.mode == "2d":
                     if "joints_2d" not in sample:
-                        raise ValueError("The selected range does not contain joints_2d.")
+                        raise ValueError(
+                            "The selected range does not contain joints_2d."
+                        )
                     camera = PerspectiveCamera(
                         fx=sample.get("fx", torch.tensor(1000.0)).reshape(()),
                         fy=sample.get("fy", torch.tensor(1000.0)).reshape(()),
@@ -1051,7 +1163,9 @@ class FittingWorker(QtCore.QObject):
                     result = fitter.fit_2d(
                         sample["joints_2d"].unsqueeze(0),
                         camera,
-                        confidences=None if confidences is None else confidences.unsqueeze(0),
+                        confidences=None
+                        if confidences is None
+                        else confidences.unsqueeze(0),
                         **fit_kwargs,
                     )
                 else:
@@ -1062,12 +1176,20 @@ class FittingWorker(QtCore.QObject):
                     return
 
                 output = result.model_output
-                frame_full_pose.append(matrix_to_axis_angle(output.local_rotations.squeeze(0).detach().cpu()))
+                frame_full_pose.append(
+                    matrix_to_axis_angle(
+                        output.local_rotations.squeeze(0).detach().cpu()
+                    )
+                )
                 frame_transl.append(output.transl.squeeze(0).detach().cpu())
                 frame_bone_scales.append(output.bone_scales.squeeze(0).detach().cpu())
-                frame_joints[frame_index] = output.joints.squeeze(0).detach().cpu().numpy()
+                frame_joints[frame_index] = (
+                    output.joints.squeeze(0).detach().cpu().numpy()
+                )
                 prev_state = {
-                    "init_global_orient": output.global_orient.squeeze(0).detach().cpu(),
+                    "init_global_orient": output.global_orient.squeeze(0)
+                    .detach()
+                    .cpu(),
                     "init_body_pose": output.body_pose.squeeze(0).detach().cpu(),
                     "init_bone_scales": output.bone_scales.squeeze(0).detach().cpu(),
                     "init_transl": output.transl.squeeze(0).detach().cpu(),
@@ -1079,7 +1201,9 @@ class FittingWorker(QtCore.QObject):
                 "full_pose": torch.stack(frame_full_pose, dim=0),
                 "transl": torch.stack(frame_transl, dim=0),
                 "bone_scales": torch.stack(frame_bone_scales, dim=0),
-                "joints": np.stack([value for value in frame_joints if value is not None], axis=0),
+                "joints": np.stack(
+                    [value for value in frame_joints if value is not None], axis=0
+                ),
                 "losses": last_losses,
                 "iterations": total_completed_iters,
                 "iters_per_frame": self.num_iters,
@@ -1100,7 +1224,9 @@ class FittingWorker(QtCore.QObject):
         for key, value in self.sequence.items():
             if not isinstance(value, torch.Tensor):
                 continue
-            sample[key] = value[frame_index] if value.shape[0] == total_frames else value
+            sample[key] = (
+                value[frame_index] if value.shape[0] == total_frames else value
+            )
         return sample
 
 
@@ -1183,7 +1309,9 @@ class SkeletonViewport(gl.GLViewWidget):
             self.joint_items.append(joint_item)
 
             if parent_index < 0:
-                target_joint_item = self._make_joint_item(TARGET_JOINT_COLOR, opaque=False)
+                target_joint_item = self._make_joint_item(
+                    TARGET_JOINT_COLOR, opaque=False
+                )
                 target_joint_item.hide()
                 self.addItem(target_joint_item)
                 self.target_joint_items.append(target_joint_item)
@@ -1206,14 +1334,20 @@ class SkeletonViewport(gl.GLViewWidget):
         if len(self.target_joint_items) < len(self.parents):
             missing = len(self.parents) - len(self.target_joint_items)
             for _ in range(missing):
-                target_joint_item = self._make_joint_item(TARGET_JOINT_COLOR, opaque=False)
+                target_joint_item = self._make_joint_item(
+                    TARGET_JOINT_COLOR, opaque=False
+                )
                 target_joint_item.hide()
                 self.addItem(target_joint_item)
                 self.target_joint_items.append(target_joint_item)
 
-    def update_skeleton(self, joints: np.ndarray, *, selected_joint: int | None = None) -> None:
+    def update_skeleton(
+        self, joints: np.ndarray, *, selected_joint: int | None = None
+    ) -> None:
         if not self.parents or len(self.parents) != len(joints):
-            raise ValueError("Topology must be initialized before updating the skeleton.")
+            raise ValueError(
+                "Topology must be initialized before updating the skeleton."
+            )
 
         render_joints = scene_to_view(joints)
         self._last_render_joints = render_joints
@@ -1237,7 +1371,9 @@ class SkeletonViewport(gl.GLViewWidget):
             self.gizmo.update()
             return
         if not self.parents or len(self.parents) != len(joints):
-            raise ValueError("Topology must be initialized before updating the target overlay.")
+            raise ValueError(
+                "Topology must be initialized before updating the target overlay."
+            )
 
         render_joints = scene_to_view(joints)
         self._target_render_joints = render_joints
@@ -1349,7 +1485,9 @@ class SkeletonViewport(gl.GLViewWidget):
 
         item.translate(*map(float, start), local=False)
 
-    def _make_joint_item(self, color: tuple[float, float, float, float], *, opaque: bool) -> gl.GLMeshItem:
+    def _make_joint_item(
+        self, color: tuple[float, float, float, float], *, opaque: bool
+    ) -> gl.GLMeshItem:
         item = gl.GLMeshItem(
             meshdata=self.joint_mesh,
             smooth=True,
@@ -1361,7 +1499,9 @@ class SkeletonViewport(gl.GLViewWidget):
         item.setGLOptions("opaque" if opaque else "translucent")
         return item
 
-    def _make_bone_item(self, color: tuple[float, float, float, float], *, opaque: bool) -> gl.GLMeshItem:
+    def _make_bone_item(
+        self, color: tuple[float, float, float, float], *, opaque: bool
+    ) -> gl.GLMeshItem:
         item = gl.GLMeshItem(
             meshdata=self.bone_mesh,
             smooth=False,
@@ -1373,7 +1513,9 @@ class SkeletonViewport(gl.GLViewWidget):
         item.setGLOptions("opaque" if opaque else "translucent")
         return item
 
-    def _compute_radii(self, render_joints: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _compute_radii(
+        self, render_joints: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         mins = render_joints.min(axis=0)
         maxs = render_joints.max(axis=0)
         extent = float(np.max(maxs - mins))
@@ -1387,8 +1529,12 @@ class SkeletonViewport(gl.GLViewWidget):
         for joint_index, parent_index in enumerate(self.parents):
             if parent_index < 0:
                 continue
-            segment_length = float(np.linalg.norm(render_joints[joint_index] - render_joints[parent_index]))
-            segment_radius = float(np.clip(segment_length * 0.12, min_bone_radius, max_bone_radius))
+            segment_length = float(
+                np.linalg.norm(render_joints[joint_index] - render_joints[parent_index])
+            )
+            segment_radius = float(
+                np.clip(segment_length * 0.12, min_bone_radius, max_bone_radius)
+            )
             bone_radii[joint_index] = segment_radius
             joint_radius = max(segment_radius * 0.90, min_joint_radius)
             joint_radii[joint_index] = max(joint_radii[joint_index], joint_radius)
@@ -1456,7 +1602,7 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("skelix Playground")
+        self.setWindowTitle("DifferentialSkeletons Playground")
         self.resize(1500, 920)
 
         self.model = None
@@ -1636,7 +1782,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         splitter.setChildrenCollapsible(False)
         layout.addWidget(splitter)
 
-        def create_sidebar(*, minimum_width: int, maximum_width: int) -> tuple[QtWidgets.QScrollArea, QtWidgets.QVBoxLayout]:
+        def create_sidebar(
+            *, minimum_width: int, maximum_width: int
+        ) -> tuple[QtWidgets.QScrollArea, QtWidgets.QVBoxLayout]:
             sidebar = QtWidgets.QScrollArea()
             sidebar.setWidgetResizable(True)
             sidebar.setMinimumWidth(minimum_width)
@@ -1650,13 +1798,17 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             sidebar_layout.setSpacing(12)
             return sidebar, sidebar_layout
 
-        left_sidebar, left_sidebar_layout = create_sidebar(minimum_width=340, maximum_width=430)
+        left_sidebar, left_sidebar_layout = create_sidebar(
+            minimum_width=340, maximum_width=430
+        )
         splitter.addWidget(left_sidebar)
 
         self.viewport = SkeletonViewport()
         splitter.addWidget(self.viewport)
 
-        right_sidebar, right_sidebar_layout = create_sidebar(minimum_width=340, maximum_width=430)
+        right_sidebar, right_sidebar_layout = create_sidebar(
+            minimum_width=340, maximum_width=430
+        )
         splitter.addWidget(right_sidebar)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
@@ -1707,7 +1859,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             decimals=2,
             suffix="x",
         )
-        self.animation_speed_slider.value_changed.connect(self._on_animation_speed_changed)
+        self.animation_speed_slider.value_changed.connect(
+            self._on_animation_speed_changed
+        )
         animation_layout.addWidget(self.animation_speed_slider)
 
         self.animation_phase_slider = FloatSlider(
@@ -1718,7 +1872,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             decimals=3,
             suffix=" turn",
         )
-        self.animation_phase_slider.value_changed.connect(self._on_animation_phase_changed)
+        self.animation_phase_slider.value_changed.connect(
+            self._on_animation_phase_changed
+        )
         animation_layout.addWidget(self.animation_phase_slider)
         left_sidebar_layout.addWidget(animation_group)
 
@@ -1808,7 +1964,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.sequence_frame_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
         self.sequence_frame_slider.setRange(0, 0)
         self.sequence_frame_slider.setEnabled(False)
-        self.sequence_frame_slider.valueChanged.connect(self._on_sequence_frame_slider_changed)
+        self.sequence_frame_slider.valueChanged.connect(
+            self._on_sequence_frame_slider_changed
+        )
         fitting_layout.addWidget(self.sequence_frame_slider)
 
         self.sequence_frame_label = QtWidgets.QLabel("No active range.")
@@ -1848,11 +2006,15 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.fit_optimize_scale_check.setChecked(True)
         fitting_layout.addWidget(self.fit_optimize_scale_check)
 
-        self.fit_pose_prior_check = QtWidgets.QCheckBox("Use pose prior latent when available")
+        self.fit_pose_prior_check = QtWidgets.QCheckBox(
+            "Use pose prior latent when available"
+        )
         self.fit_pose_prior_check.setChecked(True)
         fitting_layout.addWidget(self.fit_pose_prior_check)
 
-        self.fit_init_from_ik_check = QtWidgets.QCheckBox("Initialize 3D fit from inverse kinematics")
+        self.fit_init_from_ik_check = QtWidgets.QCheckBox(
+            "Initialize 3D fit from inverse kinematics"
+        )
         self.fit_init_from_ik_check.setChecked(True)
         fitting_layout.addWidget(self.fit_init_from_ik_check)
 
@@ -1897,7 +2059,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
         pose_group = QtWidgets.QGroupBox("Joint Pose")
         pose_layout = QtWidgets.QVBoxLayout(pose_group)
-        pose_note = QtWidgets.QLabel("Axis-angle in degrees. Select the root joint to edit global orientation.")
+        pose_note = QtWidgets.QLabel(
+            "Axis-angle in degrees. Select the root joint to edit global orientation."
+        )
         pose_note.setWordWrap(True)
         pose_note.setStyleSheet(SECONDARY_TEXT_STYLE)
         pose_layout.addWidget(pose_note)
@@ -1916,7 +2080,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
                 decimals=1,
                 suffix=" deg",
             )
-            slider.value_changed.connect(self._make_pose_callback(len(self.pose_sliders)))
+            slider.value_changed.connect(
+                self._make_pose_callback(len(self.pose_sliders))
+            )
             pose_layout.addWidget(slider)
             self.pose_sliders.append(slider)
         self.zero_joint_button = QtWidgets.QPushButton("Zero Selected Joint")
@@ -1951,7 +2117,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
             enable_check = QtWidgets.QCheckBox()
             enable_check.toggled.connect(self._on_rom_limit_changed)
-            rom_grid.addWidget(enable_check, axis + 1, 1, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
+            rom_grid.addWidget(
+                enable_check, axis + 1, 1, alignment=QtCore.Qt.AlignmentFlag.AlignCenter
+            )
             self.rom_enable_checks.append(enable_check)
 
             min_spin = QtWidgets.QDoubleSpinBox()
@@ -2004,7 +2172,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
                 decimals=2,
                 suffix=" m",
             )
-            slider.value_changed.connect(self._make_translation_callback(len(self.translation_sliders)))
+            slider.value_changed.connect(
+                self._make_translation_callback(len(self.translation_sliders))
+            )
             translation_layout.addWidget(slider)
             self.translation_sliders.append(slider)
         right_sidebar_layout.addWidget(translation_group)
@@ -2041,7 +2211,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
                 decimals=2,
                 suffix="x",
             )
-            slider.value_changed.connect(self._make_scale_callback(len(self.scale_sliders)))
+            slider.value_changed.connect(
+                self._make_scale_callback(len(self.scale_sliders))
+            )
             scale_layout.addWidget(slider)
             self.scale_sliders.append(slider)
         self.reset_scale_button = QtWidgets.QPushButton("Reset Selected Body")
@@ -2075,7 +2247,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             return [AxisRomLimit() for _ in range(3)]
         return self.rom_limits[self.model.joint_names[joint_index]]
 
-    def _clamp_angle_to_rom_limit(self, joint_index: int, axis: int, value_rad: float) -> float:
+    def _clamp_angle_to_rom_limit(
+        self, joint_index: int, axis: int, value_rad: float
+    ) -> float:
         limit = self._rom_limits_for_joint(joint_index)[axis]
         if not limit.enabled:
             return value_rad
@@ -2163,7 +2337,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         if joints is None or camera is None:
             return None
         with torch.no_grad():
-            projected = camera.project(torch.from_numpy(np.asarray(joints, dtype=np.float32)).unsqueeze(0))
+            projected = camera.project(
+                torch.from_numpy(np.asarray(joints, dtype=np.float32)).unsqueeze(0)
+            )
         return projected.squeeze(0).detach().cpu().numpy()
 
     def _update_projection_preview(self, joints: np.ndarray | None) -> None:
@@ -2184,7 +2360,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._update_fit_controls()
 
     def _update_floor_toggle_button(self) -> None:
-        self.floor_toggle_button.setText("Hide Floor" if self.viewport.floor_visible else "Show Floor")
+        self.floor_toggle_button.setText(
+            "Hide Floor" if self.viewport.floor_visible else "Show Floor"
+        )
 
     def _toggle_floor_visibility(self, *_args) -> None:
         self.viewport.set_floor_visible(not self.viewport.floor_visible)
@@ -2205,13 +2383,19 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.sample_spin.blockSignals(False)
 
         self.sequence_frame_slider.blockSignals(True)
-        self.sequence_frame_slider.setRange(self.range_start_index, self.range_end_index)
+        self.sequence_frame_slider.setRange(
+            self.range_start_index, self.range_end_index
+        )
         self.sequence_frame_slider.setValue(self.current_sample_index)
         self.sequence_frame_slider.blockSignals(False)
 
         frame_offset = self.current_sample_index - self.range_start_index + 1
         range_length = self._selected_range_length()
-        fit_state = "fitted sequence" if self.sequence_fit_payload is not None else "target range"
+        fit_state = (
+            "fitted sequence"
+            if self.sequence_fit_payload is not None
+            else "target range"
+        )
         self.sequence_frame_label.setText(
             f"Frame {frame_offset}/{range_length} in selected range "
             f"({self.current_sample_index} absolute, {fit_state})."
@@ -2260,7 +2444,11 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         return sequence
 
     def _populate_example_selectors(self) -> None:
-        current_key = self.example_combo.currentData() if hasattr(self, "example_combo") else "none"
+        current_key = (
+            self.example_combo.currentData()
+            if hasattr(self, "example_combo")
+            else "none"
+        )
         self.example_combo.blockSignals(True)
         self.example_combo.clear()
         self.example_combo.addItem("None", userData="none")
@@ -2306,12 +2494,18 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._update_example_controls()
 
     def _apply_example_frame(self, frame_index: int) -> None:
-        if self.example_body_pose is None or self.example_global_orient is None or self.example_transl is None:
+        if (
+            self.example_body_pose is None
+            or self.example_global_orient is None
+            or self.example_transl is None
+        ):
             return
         frame_index = int(np.clip(frame_index, 0, len(self.example_labels) - 1))
         self.full_pose.zero_()
         self.full_pose[self.model.root_index] = self.example_global_orient[frame_index]
-        self.full_pose[list(self.model.non_root_joint_indices)] = self.example_body_pose[frame_index]
+        self.full_pose[list(self.model.non_root_joint_indices)] = (
+            self.example_body_pose[frame_index]
+        )
         self.translation = self.example_transl[frame_index].clone()
         self._sync_pose_sliders()
         self._sync_translation_sliders()
@@ -2372,7 +2566,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             return
         path = Path(file_path)
         try:
-            dataset = FrameDataset.from_npz(path, expected_num_joints=self.model.num_joints)
+            dataset = FrameDataset.from_npz(
+                path, expected_num_joints=self.model.num_joints
+            )
         except Exception as exc:  # pragma: no cover - GUI error reporting
             QtWidgets.QMessageBox.warning(self, "Load Dataset", str(exc))
             return
@@ -2401,7 +2597,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.sample_spin.setValue(self.current_sample_index)
         self.sample_spin.blockSignals(False)
         self.sequence_frame_slider.blockSignals(True)
-        self.sequence_frame_slider.setRange(self.range_start_index, self.range_end_index)
+        self.sequence_frame_slider.setRange(
+            self.range_start_index, self.range_end_index
+        )
         self.sequence_frame_slider.setEnabled(len(dataset) > 0)
         self.sequence_frame_slider.setValue(self.current_sample_index)
         self.sequence_frame_slider.blockSignals(False)
@@ -2497,23 +2695,39 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.current_sample_index = index
         sample = self.loaded_dataset[index]
         self.current_sample = {
-            key: value.detach().cpu().clone() if isinstance(value, torch.Tensor) else value
+            key: value.detach().cpu().clone()
+            if isinstance(value, torch.Tensor)
+            else value
             for key, value in sample.items()
         }
         self.target_joints_3d = sample["joints_3d"].detach().cpu().numpy()
-        self.target_joints_2d = sample["joints_2d"].detach().cpu().numpy() if "joints_2d" in sample else None
+        self.target_joints_2d = (
+            sample["joints_2d"].detach().cpu().numpy()
+            if "joints_2d" in sample
+            else None
+        )
         self.current_camera = self._sample_camera()
         if self.sequence_fit_payload is not None:
             relative_index = self.current_sample_index - self.range_start_index
-            self.full_pose = self.sequence_fit_payload["full_pose"][relative_index].clone()
-            self.translation = self.sequence_fit_payload["transl"][relative_index].clone()
-            self.bone_scales = self.sequence_fit_payload["bone_scales"][relative_index].clone()
+            self.full_pose = self.sequence_fit_payload["full_pose"][
+                relative_index
+            ].clone()
+            self.translation = self.sequence_fit_payload["transl"][
+                relative_index
+            ].clone()
+            self.bone_scales = self.sequence_fit_payload["bone_scales"][
+                relative_index
+            ].clone()
             self._sync_pose_sliders()
             self._sync_translation_sliders()
             self._sync_scale_sliders()
 
         has_2d = "joints_2d" in sample
-        camera_note = "camera defaults" if has_2d and self.current_camera is not None else "no camera"
+        camera_note = (
+            "camera defaults"
+            if has_2d and self.current_camera is not None
+            else "no camera"
+        )
         self.dataset_info_label.setText(
             f"Frames: {len(self.loaded_dataset)} | Range: {self.range_start_index}-{self.range_end_index}\n"
             f"Current frame: {index} | 3D joints: yes | 2D joints: {'yes' if has_2d else 'no'} | {camera_note}"
@@ -2548,10 +2762,16 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._update_fit_controls()
 
     def _update_fit_controls(self, *_args) -> None:
-        dataset_ready = self.loaded_dataset is not None and self.current_sample is not None
+        dataset_ready = (
+            self.loaded_dataset is not None and self.current_sample is not None
+        )
         sample_has_2d = dataset_ready and "joints_2d" in self.current_sample
         fitting_running = self.fit_thread is not None
-        fit_mode = self.fit_mode_combo.currentData() if hasattr(self, "fit_mode_combo") else "3d"
+        fit_mode = (
+            self.fit_mode_combo.currentData()
+            if hasattr(self, "fit_mode_combo")
+            else "3d"
+        )
         range_length = self._selected_range_length()
 
         if fit_mode == "2d" and not sample_has_2d:
@@ -2571,17 +2791,27 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.load_dataset_button.setEnabled(not fitting_running)
         self.clear_dataset_button.setEnabled(not fitting_running and dataset_ready)
         self.load_priors_button.setEnabled(not fitting_running)
-        self.clear_priors_button.setEnabled(not fitting_running and self.priors_path is not None)
+        self.clear_priors_button.setEnabled(
+            not fitting_running and self.priors_path is not None
+        )
         self.range_start_spin.setEnabled(dataset_ready and not fitting_running)
         self.range_end_spin.setEnabled(dataset_ready and not fitting_running)
         self.sample_spin.setEnabled(dataset_ready and not fitting_running)
         self.sequence_frame_slider.setEnabled(dataset_ready and not fitting_running)
-        self.sequence_play_button.setEnabled(dataset_ready and range_length > 1 and not fitting_running)
-        self.sequence_play_button.setText("Pause Range" if self.sequence_timer.isActive() else "Play Range")
+        self.sequence_play_button.setEnabled(
+            dataset_ready and range_length > 1 and not fitting_running
+        )
+        self.sequence_play_button.setText(
+            "Pause Range" if self.sequence_timer.isActive() else "Play Range"
+        )
         self.skeleton_combo.setEnabled(not fitting_running)
 
     def _start_fit(self, *_args) -> None:
-        if self.current_sample is None or self.model_factory is None or self.range_sequence is None:
+        if (
+            self.current_sample is None
+            or self.model_factory is None
+            or self.range_sequence is None
+        ):
             return
         if self.fit_thread is not None:
             return
@@ -2592,7 +2822,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         }
         fit_mode = self.fit_mode_combo.currentData()
         if fit_mode == "2d" and "joints_2d" not in sequence:
-            QtWidgets.QMessageBox.warning(self, "Run Fit", "The selected range does not contain joints_2d.")
+            QtWidgets.QMessageBox.warning(
+                self, "Run Fit", "The selected range does not contain joints_2d."
+            )
             return
 
         self._stop_sequence_playback()
@@ -2626,7 +2858,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.fit_thread.finished.connect(self._cleanup_fit_worker)
         self.fit_thread.finished.connect(self.fit_thread.deleteLater)
 
-        self.fit_progress_bar.setRange(0, self.fit_iters_spin.value() * self._selected_range_length())
+        self.fit_progress_bar.setRange(
+            0, self.fit_iters_spin.value() * self._selected_range_length()
+        )
         self.fit_progress_bar.setValue(0)
         self.fit_status_label.setText(
             f"Running {fit_mode.upper()} fit over frames {self.range_start_index}-{self.range_end_index}..."
@@ -2651,14 +2885,22 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self.fit_progress_bar.setRange(0, int(payload["total_iters"]))
         self.fit_progress_bar.setValue(int(payload["total_iter"]))
         self.current_sample_index = absolute_index
-        if self.loaded_dataset is not None and 0 <= absolute_index < len(self.loaded_dataset):
+        if self.loaded_dataset is not None and 0 <= absolute_index < len(
+            self.loaded_dataset
+        ):
             sample = self.loaded_dataset[absolute_index]
             self.current_sample = {
-                key: value.detach().cpu().clone() if isinstance(value, torch.Tensor) else value
+                key: value.detach().cpu().clone()
+                if isinstance(value, torch.Tensor)
+                else value
                 for key, value in sample.items()
             }
             self.target_joints_3d = sample["joints_3d"].detach().cpu().numpy()
-            self.target_joints_2d = sample["joints_2d"].detach().cpu().numpy() if "joints_2d" in sample else None
+            self.target_joints_2d = (
+                sample["joints_2d"].detach().cpu().numpy()
+                if "joints_2d" in sample
+                else None
+            )
             self.current_camera = self._sample_camera()
         self._update_sequence_frame_controls()
         self.sample_spin.blockSignals(True)
@@ -2722,7 +2964,11 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._update_fit_controls()
 
     def _default_rom_path(self) -> Path:
-        return Path(__file__).resolve().parent / "rom_limits" / f"{self.model.spec.name}.json"
+        return (
+            Path(__file__).resolve().parent
+            / "rom_limits"
+            / f"{self.model.spec.name}.json"
+        )
 
     def _serialize_rom_limits(self) -> dict[str, object]:
         payload: dict[str, object] = {}
@@ -2746,7 +2992,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
     def _apply_rom_payload(self, payload: dict[str, object]) -> None:
         skeleton_name = payload.get("skeleton")
-        if skeleton_name is not None and _normalize_skeleton_name(str(skeleton_name)) != _normalize_skeleton_name(self.model.spec.name):
+        if skeleton_name is not None and _normalize_skeleton_name(
+            str(skeleton_name)
+        ) != _normalize_skeleton_name(self.model.spec.name):
             raise ValueError(
                 f"ROM file skeleton {skeleton_name!r} does not match current skeleton {self.model.spec.name!r}.",
             )
@@ -2765,8 +3013,16 @@ class SkelixPlayground(QtWidgets.QMainWindow):
                 limit_payload = axis_payload[axis_key]
                 if not isinstance(limit_payload, dict):
                     continue
-                minimum_deg = float(limit_payload.get("min_deg", limit_payload.get("minimum_deg", -180.0)))
-                maximum_deg = float(limit_payload.get("max_deg", limit_payload.get("maximum_deg", 180.0)))
+                minimum_deg = float(
+                    limit_payload.get(
+                        "min_deg", limit_payload.get("minimum_deg", -180.0)
+                    )
+                )
+                maximum_deg = float(
+                    limit_payload.get(
+                        "max_deg", limit_payload.get("maximum_deg", 180.0)
+                    )
+                )
                 if minimum_deg > maximum_deg:
                     minimum_deg, maximum_deg = maximum_deg, minimum_deg
                 rom_limits[joint_name][axis] = AxisRomLimit(
@@ -2795,7 +3051,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         if path.suffix.lower() != ".json":
             path = path.with_suffix(".json")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self._serialize_rom_limits(), indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(self._serialize_rom_limits(), indent=2), encoding="utf-8"
+        )
         self._status_message(f"Saved ROM limits to {path.name}")
 
     def _load_rom_limits_from_file(self, *_args) -> None:
@@ -2865,8 +3123,14 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         self._refresh_view(fit_camera=True)
 
     def _populate_animation_selectors(self) -> None:
-        current_key = self._active_animation().key if self._active_animation() is not None else "none"
-        self.available_animations = [preset for preset in ANIMATION_PRESETS if preset.matcher(self.model)]
+        current_key = (
+            self._active_animation().key
+            if self._active_animation() is not None
+            else "none"
+        )
+        self.available_animations = [
+            preset for preset in ANIMATION_PRESETS if preset.matcher(self.model)
+        ]
 
         self.animation_combo.blockSignals(True)
         self.animation_combo.clear()
@@ -2895,7 +3159,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
         self.scale_joint_combo.blockSignals(True)
         self.scale_joint_combo.clear()
-        self.scale_joint_combo.addItems([self.model.joint_names[idx] for idx in self.scale_joint_indices])
+        self.scale_joint_combo.addItems(
+            [self.model.joint_names[idx] for idx in self.scale_joint_indices]
+        )
         self.scale_joint_combo.setCurrentText(self.model.joint_names[scale_joint])
         self.scale_joint_combo.blockSignals(False)
 
@@ -2998,7 +3264,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
             self.animation_timer.stop()
             self._update_animation_controls()
             return
-        self.animation_time = (self.animation_time + self.ANIMATION_DT * self.animation_speed) % preset.period
+        self.animation_time = (
+            self.animation_time + self.ANIMATION_DT * self.animation_speed
+        ) % preset.period
         self._sync_animation_phase_slider()
         self._refresh_view()
 
@@ -3076,11 +3344,15 @@ class SkelixPlayground(QtWidgets.QMainWindow):
         joint_index = self._selected_pose_joint()
         if joint_index < 0:
             return
-        self.rom_limits[self.model.joint_names[joint_index]] = [AxisRomLimit() for _ in range(3)]
+        self.rom_limits[self.model.joint_names[joint_index]] = [
+            AxisRomLimit() for _ in range(3)
+        ]
         self._sync_rom_controls()
         self._sync_pose_sliders()
         self._refresh_view()
-        self._status_message(f"Cleared ROM limits for {self.model.joint_names[joint_index]}")
+        self._status_message(
+            f"Cleared ROM limits for {self.model.joint_names[joint_index]}"
+        )
 
     def _clear_all_rom(self, *_args) -> None:
         self.rom_limits = self._default_rom_limits()
@@ -3152,7 +3424,9 @@ class SkelixPlayground(QtWidgets.QMainWindow):
 
     def _refresh_view(self, *_args, fit_camera: bool = False) -> None:
         joints = self._display_joints()
-        self.viewport.update_skeleton(joints, selected_joint=self._selected_pose_joint())
+        self.viewport.update_skeleton(
+            joints, selected_joint=self._selected_pose_joint()
+        )
         self.viewport.set_target_overlay(self.target_joints_3d)
         self._update_projection_preview(joints)
         if fit_camera:
@@ -3164,7 +3438,7 @@ def main() -> int:
     owns_app = app is None
     if app is None:
         app = QtWidgets.QApplication(sys.argv)
-        app.setApplicationName("skelix Playground")
+        app.setApplicationName("DifferentialSkeletons Playground")
 
     window = SkelixPlayground()
     app._skelix_window = window

@@ -12,7 +12,7 @@ from ...ik import estimate_bone_scales_from_joints, estimate_rotations_from_join
 from ...model import SkeletalModel
 from ...rotations import matrix_to_rot6d
 
-CAMERA_KEYS = ('fx', 'fy', 'cx', 'cy', 'camera_translation', 'camera_rotation')
+CAMERA_KEYS = ("fx", "fy", "cx", "cy", "camera_translation", "camera_rotation")
 
 
 def _clone_metadata_value(value: Any) -> Any:
@@ -31,9 +31,13 @@ def _validate_joint_tensor(
     expected_num_joints: int | None = None,
 ) -> None:
     if joints.ndim != ndim or joints.shape[-1] != 3:
-        raise ValueError(f'{name} must have shape [..., J, 3] with {ndim} dimensions, got {tuple(joints.shape)}.')
+        raise ValueError(
+            f"{name} must have shape [..., J, 3] with {ndim} dimensions, got {tuple(joints.shape)}."
+        )
     if expected_num_joints is not None and joints.shape[-2] != expected_num_joints:
-        raise ValueError(f'{name} must contain {expected_num_joints} joints, got {joints.shape[-2]}.')
+        raise ValueError(
+            f"{name} must contain {expected_num_joints} joints, got {joints.shape[-2]}."
+        )
 
 
 @dataclass
@@ -86,7 +90,9 @@ class FrameDataset(Dataset[dict[str, torch.Tensor]]):
         metadata: dict[str, Any] | None = None,
         expected_num_joints: int | None = None,
     ) -> None:
-        _validate_joint_tensor('joints_3d', joints_3d, ndim=3, expected_num_joints=expected_num_joints)
+        _validate_joint_tensor(
+            "joints_3d", joints_3d, ndim=3, expected_num_joints=expected_num_joints
+        )
         self.joints_3d = joints_3d.float()
         self.joints_2d = joints_2d.float() if joints_2d is not None else None
         self.confidences = confidences.float() if confidences is not None else None
@@ -97,11 +103,11 @@ class FrameDataset(Dataset[dict[str, torch.Tensor]]):
         return int(self.joints_3d.shape[0])
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
-        item = {'joints_3d': self.joints_3d[index]}
+        item = {"joints_3d": self.joints_3d[index]}
         if self.joints_2d is not None:
-            item['joints_2d'] = self.joints_2d[index]
+            item["joints_2d"] = self.joints_2d[index]
         if self.confidences is not None:
-            item['confidences'] = self.confidences[index]
+            item["confidences"] = self.confidences[index]
         for key, value in self.cameras.items():
             item[key] = value[index] if value.shape[0] == len(self) else value
         return item
@@ -112,7 +118,7 @@ class FrameDataset(Dataset[dict[str, torch.Tensor]]):
         path: str | Path,
         *,
         expected_num_joints: int | None = None,
-    ) -> 'FrameDataset':
+    ) -> "FrameDataset":
         """Construct a frame dataset from the shared `.npz` fitting schema.
 
         Args:
@@ -124,14 +130,28 @@ class FrameDataset(Dataset[dict[str, torch.Tensor]]):
         """
 
         with np.load(path, allow_pickle=True) as payload:
-            joints_3d_key = 'joints_3d' if 'joints_3d' in payload else 'S' if 'S' in payload else None
+            joints_3d_key = (
+                "joints_3d"
+                if "joints_3d" in payload
+                else "S"
+                if "S" in payload
+                else None
+            )
             if joints_3d_key is None:
-                raise ValueError('No joints_3d or S array found in the .npz payload.')
+                raise ValueError("No joints_3d or S array found in the .npz payload.")
             joints_3d = torch.from_numpy(payload[joints_3d_key]).float()
             if joints_3d.shape[-1] == 4:
                 joints_3d = joints_3d[..., :3]
-            joints_2d = torch.from_numpy(payload['joints_2d']).float() if 'joints_2d' in payload else None
-            confidences = torch.from_numpy(payload['confidences']).float() if 'confidences' in payload else None
+            joints_2d = (
+                torch.from_numpy(payload["joints_2d"]).float()
+                if "joints_2d" in payload
+                else None
+            )
+            confidences = (
+                torch.from_numpy(payload["confidences"]).float()
+                if "confidences" in payload
+                else None
+            )
             cameras = {
                 key: torch.from_numpy(payload[key]).float()
                 for key in CAMERA_KEYS
@@ -140,7 +160,7 @@ class FrameDataset(Dataset[dict[str, torch.Tensor]]):
             metadata = {
                 key: _clone_metadata_value(payload[key])
                 for key in payload.files
-                if key not in {'joints_3d', 'joints_2d', 'confidences', *CAMERA_KEYS}
+                if key not in {"joints_3d", "joints_2d", "confidences", *CAMERA_KEYS}
             }
         return cls(
             joints_3d,
@@ -178,7 +198,9 @@ class SequenceDataset(Dataset[dict[str, torch.Tensor]]):
         metadata: dict[str, Any] | None = None,
         expected_num_joints: int | None = None,
     ) -> None:
-        _validate_joint_tensor('joints_3d', joints_3d, ndim=4, expected_num_joints=expected_num_joints)
+        _validate_joint_tensor(
+            "joints_3d", joints_3d, ndim=4, expected_num_joints=expected_num_joints
+        )
         self.joints_3d = joints_3d.float()
         self.joints_2d = joints_2d.float() if joints_2d is not None else None
         self.confidences = confidences.float() if confidences is not None else None
@@ -189,11 +211,11 @@ class SequenceDataset(Dataset[dict[str, torch.Tensor]]):
         return int(self.joints_3d.shape[0])
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
-        item = {'joints_3d': self.joints_3d[index]}
+        item = {"joints_3d": self.joints_3d[index]}
         if self.joints_2d is not None:
-            item['joints_2d'] = self.joints_2d[index]
+            item["joints_2d"] = self.joints_2d[index]
         if self.confidences is not None:
-            item['confidences'] = self.confidences[index]
+            item["confidences"] = self.confidences[index]
         for key, value in self.cameras.items():
             item[key] = value[index] if value.shape[0] == len(self) else value
         return item
@@ -204,7 +226,7 @@ class SequenceDataset(Dataset[dict[str, torch.Tensor]]):
         path: str | Path,
         *,
         expected_num_joints: int | None = None,
-    ) -> 'SequenceDataset':
+    ) -> "SequenceDataset":
         """Construct a sequence dataset from the shared `.npz` fitting schema.
 
         Args:
@@ -216,9 +238,17 @@ class SequenceDataset(Dataset[dict[str, torch.Tensor]]):
         """
 
         with np.load(path, allow_pickle=True) as payload:
-            joints_3d = torch.from_numpy(payload['joints_3d']).float()
-            joints_2d = torch.from_numpy(payload['joints_2d']).float() if 'joints_2d' in payload else None
-            confidences = torch.from_numpy(payload['confidences']).float() if 'confidences' in payload else None
+            joints_3d = torch.from_numpy(payload["joints_3d"]).float()
+            joints_2d = (
+                torch.from_numpy(payload["joints_2d"]).float()
+                if "joints_2d" in payload
+                else None
+            )
+            confidences = (
+                torch.from_numpy(payload["confidences"]).float()
+                if "confidences" in payload
+                else None
+            )
             cameras = {
                 key: torch.from_numpy(payload[key]).float()
                 for key in CAMERA_KEYS
@@ -227,7 +257,7 @@ class SequenceDataset(Dataset[dict[str, torch.Tensor]]):
             metadata = {
                 key: _clone_metadata_value(payload[key])
                 for key in payload.files
-                if key not in {'joints_3d', 'joints_2d', 'confidences', *CAMERA_KEYS}
+                if key not in {"joints_3d", "joints_2d", "confidences", *CAMERA_KEYS}
             }
         return cls(
             joints_3d,
@@ -258,7 +288,7 @@ def prepare_frame_batch(
     """
 
     if joints_3d.shape[-2:] != (model.num_joints, 3):
-        raise ValueError(f'joints_3d must have shape [..., {model.num_joints}, 3].')
+        raise ValueError(f"joints_3d must have shape [..., {model.num_joints}, 3].")
     joints_3d = joints_3d.float()
     if estimate_bone_scales:
         bone_scales = estimate_bone_scales_from_joints(joints_3d, model)
@@ -298,13 +328,19 @@ def prepare_sequence_batch(
     """
 
     if joints_3d.ndim < 4 or joints_3d.shape[-2:] != (model.num_joints, 3):
-        raise ValueError(f'joints_3d must have shape [..., T, {model.num_joints}, 3].')
+        raise ValueError(f"joints_3d must have shape [..., T, {model.num_joints}, 3].")
     flat = joints_3d.reshape(-1, joints_3d.shape[-2], joints_3d.shape[-1])
-    batch = prepare_frame_batch(flat, model=model, estimate_bone_scales=estimate_bone_scales)
+    batch = prepare_frame_batch(
+        flat, model=model, estimate_bone_scales=estimate_bone_scales
+    )
     seq_shape = joints_3d.shape[:-2]
     return FittingDataBatch(
         joints_3d=joints_3d.float(),
-        body_pose_rot6d=batch.body_pose_rot6d.reshape(seq_shape + batch.body_pose_rot6d.shape[-2:]),
-        global_orient_rot6d=batch.global_orient_rot6d.reshape(seq_shape + batch.global_orient_rot6d.shape[-1:]),
+        body_pose_rot6d=batch.body_pose_rot6d.reshape(
+            seq_shape + batch.body_pose_rot6d.shape[-2:]
+        ),
+        global_orient_rot6d=batch.global_orient_rot6d.reshape(
+            seq_shape + batch.global_orient_rot6d.shape[-1:]
+        ),
         bone_scales=batch.bone_scales.reshape(seq_shape + batch.bone_scales.shape[-2:]),
     )

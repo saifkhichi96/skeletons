@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import torch
 
-from skelix.rotations import axis_angle_to_matrix, matrix_to_rot6d, quaternion_to_matrix, rot6d_to_matrix
+from differential_skeletons.rotations import (
+    axis_angle_to_matrix,
+    matrix_to_rot6d,
+    quaternion_to_matrix,
+    rot6d_to_matrix,
+)
 
 
 def test_axis_angle_identity() -> None:

@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "skelix"
-version = "0.2.0"
+name = "differential_skeletons"
+version = "0.1.1"
 description = "Differentiable skeletal kinematic models for pose, animation, and FK-based learning"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
-  {name = "skelix contributors"}
+  {name = "DifferentialSkeletons Contributors"}
 ]
 keywords = ["kinematics", "pose-estimation", "forward-kinematics", "skeleton", "pytorch"]
 classifiers = [
@@ -31,7 +31,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
-  "build>=1.2"
+  "build>=1.2",
+  "ruff>=0.0.241",
 ]
 
 [tool.setuptools]

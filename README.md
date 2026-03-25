@@ -1,6 +1,6 @@
-# skelix
+# DifferentialSkeletons
 
-`skelix` is a lightweight PyTorch package for differentiable skeletal kinematics. It is intended for use cases that need a reusable articulated-body module without a skinned surface model: FK-based losses, pose regularization, skeleton retargeting, canonical rest-pose animation, optimization over OpenSim-style body scale factors, and skeleton-native prior learning.
+A lightweight PyTorch package for differentiable skeletal kinematics. It is intended for use cases that need a reusable articulated-body module without a skinned surface model: FK-based losses, pose regularization, skeleton retargeting, canonical rest-pose animation, optimization over OpenSim-style body scale factors, and skeleton-native prior learning.
 
 The public API is deliberately close to the interaction style of `smplx`: models can own default parameters (`global_orient`, `body_pose`, `bone_scales`, `transl`) but explicit per-call tensors always override the stored state.
 
@@ -31,7 +31,7 @@ The public API is deliberately close to the interaction style of `smplx`: models
 ## Installation
 
 ```bash
-pip install skelix
+pip install differential_skeletons
 ```
 
 For editable development:
@@ -44,9 +44,9 @@ pip install -e .[dev]
 
 ```python
 import torch
-from skelix import Human36MModel
+import differential_skeletons as ds
 
-model = Human36MModel(
+model = ds.Human36MModel(
     create_global_orient=False,
     create_body_pose=False,
     create_bone_scales=False,
@@ -74,7 +74,7 @@ print(out.global_rotations.shape) # [B, J, 3, 3]
 
 ```python
 import torch
-from skelix.h36m import (
+from differential_skeletons.h36m import (
     H36MPoseVAE,
     H36MJointLimitTrainer,
     H36MFitter,
@@ -98,7 +98,7 @@ The Human3.6M stack expects dataset-style arrays with the official 17-joint orde
 
 ## Notes on the canonical rest pose
 
-`skelix` does **not** ship learned dataset-specific body shapes. The provided `rest_offsets` are canonical template offsets designed to be useful and stable in practice:
+`differential_skeletons` does **not** ship learned dataset-specific body shapes. The provided `rest_offsets` are canonical template offsets designed to be useful and stable in practice:
 
 - Full-body rigs use a neutral adult T-pose.
 - Hand rigs use an open-hand neutral pose.

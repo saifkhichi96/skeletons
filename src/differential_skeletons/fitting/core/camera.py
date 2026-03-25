@@ -14,7 +14,7 @@ class PerspectiveCamera:
     cx: torch.Tensor
     cy: torch.Tensor
 
-    def to(self, device: torch.device | str) -> 'PerspectiveCamera':
+    def to(self, device: torch.device | str) -> "PerspectiveCamera":
         """Move camera tensors to `device`."""
 
         device = torch.device(device)
@@ -42,7 +42,7 @@ class WeakPerspectiveCamera:
     tx: torch.Tensor
     ty: torch.Tensor
 
-    def to(self, device: torch.device | str) -> 'WeakPerspectiveCamera':
+    def to(self, device: torch.device | str) -> "WeakPerspectiveCamera":
         """Move camera tensors to `device`."""
 
         device = torch.device(device)

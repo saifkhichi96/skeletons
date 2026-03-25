@@ -6,7 +6,13 @@ from typing import Any
 import torch
 
 from ..models import Human36MModel
-from .core.data import FittingDataBatch, FrameDataset, SequenceDataset, prepare_frame_batch, prepare_sequence_batch
+from .core.data import (
+    FittingDataBatch,
+    FrameDataset,
+    SequenceDataset,
+    prepare_frame_batch,
+    prepare_sequence_batch,
+)
 from .core.fitter import SkeletalFitter
 from .core.priors import JointLimitPrior, MotionSmoothnessPrior, PoseVAE, TemporalPrior
 from .core.training import JointLimitTrainer, PoseVAETrainer, TemporalPriorTrainer
@@ -38,7 +44,7 @@ class H36MFrameDataset(FrameDataset):
         )
 
     @classmethod
-    def from_npz(cls, path: str | Path) -> 'H36MFrameDataset':
+    def from_npz(cls, path: str | Path) -> "H36MFrameDataset":
         dataset = FrameDataset.from_npz(path, expected_num_joints=17)
         return cls(
             dataset.joints_3d,
@@ -71,7 +77,7 @@ class H36MSequenceDataset(SequenceDataset):
         )
 
     @classmethod
-    def from_npz(cls, path: str | Path) -> 'H36MSequenceDataset':
+    def from_npz(cls, path: str | Path) -> "H36MSequenceDataset":
         dataset = SequenceDataset.from_npz(path, expected_num_joints=17)
         return cls(
             dataset.joints_3d,
@@ -123,7 +129,7 @@ class H36MFitter(SkeletalFitter):
         joint_limit_prior: JointLimitPrior | None = None,
         temporal_prior: TemporalPrior | None = None,
         smoothness_prior: MotionSmoothnessPrior | None = None,
-        device: torch.device | str = 'cpu',
+        device: torch.device | str = "cpu",
     ) -> None:
         super().__init__(
             model=model or _default_h36m_model(),
@@ -150,7 +156,7 @@ class H36MPoseVAETrainer(PoseVAETrainer):
         prior: PoseVAE,
         *,
         model: Human36MModel | None = None,
-        device: torch.device | str = 'cpu',
+        device: torch.device | str = "cpu",
         lr: float = 1e-3,
         kl_weight: float = 1e-4,
         recon_weight: float = 1.0,
@@ -173,19 +179,21 @@ class H36MTemporalPriorTrainer(TemporalPriorTrainer):
         prior: TemporalPrior,
         *,
         model: Human36MModel | None = None,
-        device: torch.device | str = 'cpu',
+        device: torch.device | str = "cpu",
         lr: float = 1e-3,
     ) -> None:
-        super().__init__(prior, model=model or _default_h36m_model(), device=device, lr=lr)
+        super().__init__(
+            prior, model=model or _default_h36m_model(), device=device, lr=lr
+        )
 
 
 __all__ = [
-    'H36MFrameDataset',
-    'H36MSequenceDataset',
-    'prepare_h36m_frame_batch',
-    'prepare_h36m_sequence_batch',
-    'H36MFitter',
-    'H36MJointLimitTrainer',
-    'H36MPoseVAETrainer',
-    'H36MTemporalPriorTrainer',
+    "H36MFrameDataset",
+    "H36MSequenceDataset",
+    "prepare_h36m_frame_batch",
+    "prepare_h36m_sequence_batch",
+    "H36MFitter",
+    "H36MJointLimitTrainer",
+    "H36MPoseVAETrainer",
+    "H36MTemporalPriorTrainer",
 ]

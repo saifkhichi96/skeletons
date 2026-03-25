@@ -5,59 +5,67 @@ from typing import Literal
 import torch
 import torch.nn.functional as F
 
-PoseRepr = Literal['axis_angle', 'rotmat', 'rot6d', 'quat']
+PoseRepr = Literal["axis_angle", "rotmat", "rot6d", "quat"]
 
 
 def normalize_pose_repr(pose_repr: str) -> PoseRepr:
-    key = pose_repr.lower().replace('-', '_')
+    key = pose_repr.lower().replace("-", "_")
     aliases = {
-        'axis_angle': 'axis_angle',
-        'aa': 'axis_angle',
-        'rotvec': 'axis_angle',
-        'rotation_vector': 'axis_angle',
-        'rotmat': 'rotmat',
-        'matrix': 'rotmat',
-        'rotation_matrix': 'rotmat',
-        'rot6d': 'rot6d',
-        'rotation_6d': 'rot6d',
-        'quat': 'quat',
-        'quaternion': 'quat',
+        "axis_angle": "axis_angle",
+        "aa": "axis_angle",
+        "rotvec": "axis_angle",
+        "rotation_vector": "axis_angle",
+        "rotmat": "rotmat",
+        "matrix": "rotmat",
+        "rotation_matrix": "rotmat",
+        "rot6d": "rot6d",
+        "rotation_6d": "rot6d",
+        "quat": "quat",
+        "quaternion": "quat",
     }
     if key not in aliases:
-        raise ValueError(f'Unsupported pose representation: {pose_repr!r}')
+        raise ValueError(f"Unsupported pose representation: {pose_repr!r}")
     return aliases[key]  # type: ignore[return-value]
 
 
 def pose_repr_size(pose_repr: str) -> int:
     normalized = normalize_pose_repr(pose_repr)
-    if normalized == 'axis_angle':
+    if normalized == "axis_angle":
         return 3
-    if normalized == 'rot6d':
+    if normalized == "rot6d":
         return 6
-    if normalized == 'quat':
+    if normalized == "quat":
         return 4
-    raise ValueError('Rotation matrices do not have a flat feature size.')
+    raise ValueError("Rotation matrices do not have a flat feature size.")
 
 
-def identity_pose(num_joints: int, pose_repr: str, *, dtype: torch.dtype, device: torch.device | None = None) -> torch.Tensor:
+def identity_pose(
+    num_joints: int,
+    pose_repr: str,
+    *,
+    dtype: torch.dtype,
+    device: torch.device | None = None,
+) -> torch.Tensor:
     normalized = normalize_pose_repr(pose_repr)
-    if normalized == 'axis_angle':
+    if normalized == "axis_angle":
         return torch.zeros(num_joints, 3, dtype=dtype, device=device)
-    if normalized == 'rot6d':
+    if normalized == "rot6d":
         ident = torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0, 0.0], dtype=dtype, device=device)
         return ident.view(1, 6).repeat(num_joints, 1)
-    if normalized == 'quat':
+    if normalized == "quat":
         ident = torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=dtype, device=device)
         return ident.view(1, 4).repeat(num_joints, 1)
-    if normalized == 'rotmat':
+    if normalized == "rotmat":
         ident = torch.eye(3, dtype=dtype, device=device)
         return ident.view(1, 3, 3).repeat(num_joints, 1, 1)
-    raise ValueError(f'Unsupported pose representation: {pose_repr!r}')
+    raise ValueError(f"Unsupported pose representation: {pose_repr!r}")
 
 
 def axis_angle_to_matrix(axis_angle: torch.Tensor) -> torch.Tensor:
     if axis_angle.shape[-1] != 3:
-        raise ValueError(f'Axis-angle input must end in 3, got {tuple(axis_angle.shape)}.')
+        raise ValueError(
+            f"Axis-angle input must end in 3, got {tuple(axis_angle.shape)}."
+        )
 
     theta = torch.linalg.norm(axis_angle, dim=-1, keepdim=True)
     safe_theta = theta.clamp_min(1e-8)
@@ -67,9 +75,15 @@ def axis_angle_to_matrix(axis_angle: torch.Tensor) -> torch.Tensor:
     kx, ky, kz = axis.unbind(dim=-1)
     K = torch.stack(
         [
-            zeros, -kz, ky,
-            kz, zeros, -kx,
-            -ky, kx, zeros,
+            zeros,
+            -kz,
+            ky,
+            kz,
+            zeros,
+            -kx,
+            -ky,
+            kx,
+            zeros,
         ],
         dim=-1,
     ).reshape(axis.shape[:-1] + (3, 3))
@@ -89,7 +103,9 @@ def axis_angle_to_matrix(axis_angle: torch.Tensor) -> torch.Tensor:
 
 def matrix_to_axis_angle(matrix: torch.Tensor) -> torch.Tensor:
     if matrix.shape[-2:] != (3, 3):
-        raise ValueError(f'Rotation matrix input must end in (3, 3), got {tuple(matrix.shape)}.')
+        raise ValueError(
+            f"Rotation matrix input must end in (3, 3), got {tuple(matrix.shape)}."
+        )
 
     trace = matrix[..., 0, 0] + matrix[..., 1, 1] + matrix[..., 2, 2]
     cos_theta = ((trace - 1.0) * 0.5).clamp(-1.0, 1.0)
@@ -112,7 +128,7 @@ def matrix_to_axis_angle(matrix: torch.Tensor) -> torch.Tensor:
 
 def quaternion_to_matrix(quat: torch.Tensor) -> torch.Tensor:
     if quat.shape[-1] != 4:
-        raise ValueError(f'Quaternion input must end in 4, got {tuple(quat.shape)}.')
+        raise ValueError(f"Quaternion input must end in 4, got {tuple(quat.shape)}.")
 
     quat = F.normalize(quat, dim=-1)
     w, x, y, z = quat.unbind(dim=-1)
@@ -146,7 +162,7 @@ def quaternion_to_matrix(quat: torch.Tensor) -> torch.Tensor:
 
 def rot6d_to_matrix(rot6d: torch.Tensor) -> torch.Tensor:
     if rot6d.shape[-1] != 6:
-        raise ValueError(f'6D rotation input must end in 6, got {tuple(rot6d.shape)}.')
+        raise ValueError(f"6D rotation input must end in 6, got {tuple(rot6d.shape)}.")
 
     a1 = rot6d[..., 0:3]
     a2 = rot6d[..., 3:6]
@@ -159,7 +175,9 @@ def rot6d_to_matrix(rot6d: torch.Tensor) -> torch.Tensor:
 
 def matrix_to_rot6d(matrix: torch.Tensor) -> torch.Tensor:
     if matrix.shape[-2:] != (3, 3):
-        raise ValueError(f'Rotation matrix input must end in (3, 3), got {tuple(matrix.shape)}.')
+        raise ValueError(
+            f"Rotation matrix input must end in (3, 3), got {tuple(matrix.shape)}."
+        )
     first_two_columns = matrix[..., :, :2]
     return first_two_columns.transpose(-2, -1).reshape(matrix.shape[:-2] + (6,))
 
@@ -168,33 +186,35 @@ def rotation_geodesic_distance(
     rotation_a: torch.Tensor,
     rotation_b: torch.Tensor,
     *,
-    reduction: str = 'none',
+    reduction: str = "none",
 ) -> torch.Tensor:
     if rotation_a.shape[-2:] != (3, 3) or rotation_b.shape[-2:] != (3, 3):
-        raise ValueError('rotation_a and rotation_b must end in (3, 3).')
+        raise ValueError("rotation_a and rotation_b must end in (3, 3).")
     relative = rotation_a.transpose(-2, -1) @ rotation_b
     trace = relative[..., 0, 0] + relative[..., 1, 1] + relative[..., 2, 2]
     cosine = ((trace - 1.0) * 0.5).clamp(-1.0, 1.0)
     angle = torch.acos(cosine)
-    if reduction == 'mean':
+    if reduction == "mean":
         return angle.mean()
-    if reduction == 'sum':
+    if reduction == "sum":
         return angle.sum()
-    if reduction != 'none':
+    if reduction != "none":
         raise ValueError("reduction must be 'none', 'mean', or 'sum'.")
     return angle
 
 
 def to_rotation_matrix(pose: torch.Tensor, pose_repr: str) -> torch.Tensor:
     normalized = normalize_pose_repr(pose_repr)
-    if normalized == 'axis_angle':
+    if normalized == "axis_angle":
         return axis_angle_to_matrix(pose)
-    if normalized == 'rot6d':
+    if normalized == "rot6d":
         return rot6d_to_matrix(pose)
-    if normalized == 'quat':
+    if normalized == "quat":
         return quaternion_to_matrix(pose)
-    if normalized == 'rotmat':
+    if normalized == "rotmat":
         if pose.shape[-2:] != (3, 3):
-            raise ValueError(f'Rotation-matrix input must end in (3, 3), got {tuple(pose.shape)}.')
+            raise ValueError(
+                f"Rotation-matrix input must end in (3, 3), got {tuple(pose.shape)}."
+            )
         return pose
-    raise ValueError(f'Unsupported pose representation: {pose_repr!r}')
+    raise ValueError(f"Unsupported pose representation: {pose_repr!r}")

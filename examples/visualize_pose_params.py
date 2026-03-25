@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import torch
+from matplotlib.animation import FuncAnimation
 
-from skelix import Human36MModel
-
+from differential_skeletons import Human36MModel
 
 WALK_POSE_PARAMS = [
     {
@@ -66,7 +65,9 @@ WALK_POSE_PARAMS = [
 ]
 
 
-def build_walk_tensors(model: Human36MModel) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def build_walk_tensors(
+    model: Human36MModel,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     dtype = model.rest_offsets.dtype
     device = model.rest_offsets.device
     num_frames = len(WALK_POSE_PARAMS)
@@ -81,7 +82,9 @@ def build_walk_tensors(model: Human36MModel) -> tuple[torch.Tensor, torch.Tensor
         dtype=dtype,
         device=device,
     )
-    body_pose = torch.zeros(num_frames, model.num_joints - 1, 3, dtype=dtype, device=device)
+    body_pose = torch.zeros(
+        num_frames, model.num_joints - 1, 3, dtype=dtype, device=device
+    )
 
     body_pose_indices = {
         model.joint_names[joint_index]: body_pose_index

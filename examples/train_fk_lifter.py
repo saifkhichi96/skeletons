@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from skelix import ForwardKinematicsLoss, Human36MModel
+from differential_skeletons import ForwardKinematicsLoss, Human36MModel
 
 
 class PoseLifter(nn.Module):
@@ -45,7 +45,9 @@ def make_synthetic_dataset(
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     with torch.no_grad():
-        full_pose = torch.randn(num_samples, model.num_joints, 3, device=device) * pose_std
+        full_pose = (
+            torch.randn(num_samples, model.num_joints, 3, device=device) * pose_std
+        )
         joints_3d = model(full_pose=full_pose).joints.detach()
 
         keypoints_2d = joints_3d[..., [0, 1]]
@@ -54,7 +56,11 @@ def make_synthetic_dataset(
         root_2d = keypoints_2d[:, model.root_index : model.root_index + 1]
         keypoints_2d = keypoints_2d - root_2d
 
-        scale = torch.linalg.vector_norm(keypoints_2d, dim=-1).amax(dim=-1, keepdim=True).clamp_min(1e-6)
+        scale = (
+            torch.linalg.vector_norm(keypoints_2d, dim=-1)
+            .amax(dim=-1, keepdim=True)
+            .clamp_min(1e-6)
+        )
         keypoints_2d = keypoints_2d / scale.unsqueeze(-1)
         return keypoints_2d.cpu(), joints_3d.cpu()
 
@@ -91,7 +97,7 @@ def evaluate(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Train a simple 2D-to-3D lifting model with skelix ForwardKinematicsLoss.",
+        description="Train a simple 2D-to-3D lifting model with ForwardKinematicsLoss.",
     )
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=64)
