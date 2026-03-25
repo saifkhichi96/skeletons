@@ -34,6 +34,12 @@ This documentation is organized around the core package:
 
 .. toctree::
    :maxdepth: 2
+   :caption: Applications and Release Notes
+
+   use_cases/index
+
+.. toctree::
+   :maxdepth: 2
    :caption: Reference
 
    api/index

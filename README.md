@@ -1,6 +1,8 @@
 # DifferentialSkeletons
 
-DifferentialSkeletons is a PyTorch package for articulated skeletons. It gives you differentiable forward kinematics, inverse-kinematics-style initialization, and fitting utilities for 2D or 3D keypoints without requiring a skinned mesh model.
+**v1.0.0**
+
+DifferentialSkeletons is a PyTorch package for articulated skeletons. It gives you differentiable forward kinematics, inverse-kinematics-style initialization, fitting utilities for 2D or 3D keypoints, and trainable skeletal priors without requiring a skinned mesh model.
 
 If you already know `smplx`, the intended feel is similar:
 
@@ -44,6 +46,16 @@ If you want development tools, docs, and the playground together:
 ```bash
 pip install -e .[dev,docs,playground]
 ```
+
+## Typical use cases
+
+- FK-supervised 2D-to-3D lifting
+- optimization-based 2D and 3D fitting
+- sequence denoising and temporal refinement
+- joint-limit, VAE, and temporal prior training
+- cross-skeleton retargeting between public layouts
+- pseudo-label generation from weak 2D supervision
+- rig-specific pipelines for body, hand, face, whole-body, and spine
 
 ## Documentation
 
@@ -271,3 +283,15 @@ python examples/train_fk_lifter.py
 - This package is skeleton-only. It does not ship a mesh, skinning weights, or SMPL-family assets.
 - Body scaling follows an OpenSim-style convention: scales apply per body, and child joint offsets are scaled in the parent body frame.
 - For most fitting code, start with `build_layer(...)`. Use `*Model` classes when you want persistent learnable state inside the module.
+
+
+## Additional example scripts
+
+The `examples/` directory now includes extended, runnable examples for:
+
+- temporal lifting inspired by VideoPose3D / PoseFormer-style pipelines
+- hybrid analytic-neural IK inspired by HybrIK-style designs
+- sequence denoising with temporal priors and smoothness regularization
+- cross-skeleton retargeting between public layouts
+- pseudo-label bootstrapping from 2D detections
+- spine-specific sequence fitting

@@ -110,4 +110,4 @@ __all__ = [
     "estimate_rotations_from_joints",
 ]
 
-__version__ = "0.2.0"
+__version__ = "1.0.0"
