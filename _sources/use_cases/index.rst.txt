@@ -11,4 +11,4 @@ pose, motion, animation, and fitting research.
    overview
    modern_research_patterns
    domain_specific_rigs
-   release_v1_0_0
+   release_v0_1_0

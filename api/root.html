@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Top-Level Package &mdash; skeletons 1.0.0</title>
+  <title>Top-Level Package &mdash; skeletons 0.1.0</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
@@ -245,10 +245,10 @@
 <li class="toctree-l3"><a class="reference internal" href="../use_cases/domain_specific_rigs.html#spine-rigs">Spine rigs</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../use_cases/release_v1_0_0.html">Skeletons 1.0.0</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../use_cases/release_v1_0_0.html#articulated-rigs-and-kinematics">Articulated rigs and kinematics</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../use_cases/release_v1_0_0.html#inverse-kinematics-fitting-and-motion">Inverse kinematics, fitting, and motion</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../use_cases/release_v1_0_0.html#interactive-playground-and-documentation">Interactive playground and documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/release_v0_1_0.html">Skeletons 0.1.0</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../use_cases/release_v0_1_0.html#articulated-rigs-and-kinematics">Articulated rigs and kinematics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../use_cases/release_v0_1_0.html#inverse-kinematics-fitting-and-motion">Inverse kinematics, fitting, and motion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../use_cases/release_v0_1_0.html#examples-and-documentation">Examples and documentation</a></li>
 </ul>
 </li>
 </ul>
@@ -405,30 +405,6 @@
 <li class="toctree-l4"><a class="reference internal" href="#skeletons.LiftingEvaluation.num_frames"><code class="docutils literal notranslate"><span class="pre">LiftingEvaluation.num_frames</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.AnimationPreset"><code class="docutils literal notranslate"><span class="pre">AnimationPreset</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AnimationPreset.key"><code class="docutils literal notranslate"><span class="pre">AnimationPreset.key</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AnimationPreset.label"><code class="docutils literal notranslate"><span class="pre">AnimationPreset.label</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AnimationPreset.period"><code class="docutils literal notranslate"><span class="pre">AnimationPreset.period</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AnimationPreset.matcher"><code class="docutils literal notranslate"><span class="pre">AnimationPreset.matcher</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AnimationPreset.generator"><code class="docutils literal notranslate"><span class="pre">AnimationPreset.generator</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.AxisRomLimit"><code class="docutils literal notranslate"><span class="pre">AxisRomLimit</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AxisRomLimit.enabled"><code class="docutils literal notranslate"><span class="pre">AxisRomLimit.enabled</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AxisRomLimit.minimum_deg"><code class="docutils literal notranslate"><span class="pre">AxisRomLimit.minimum_deg</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.AxisRomLimit.maximum_deg"><code class="docutils literal notranslate"><span class="pre">AxisRomLimit.maximum_deg</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.SyntheticFittingControls"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.SyntheticFittingControls.num_frames"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls.num_frames</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.SyntheticFittingControls.pose_std"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls.pose_std</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.SyntheticFittingControls.noise_std"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls.noise_std</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.SyntheticFittingControls.confidence_dropout"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls.confidence_dropout</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.SyntheticFittingControls.transl_std"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls.transl_std</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.SyntheticFittingControls.depth"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls.depth</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#skeletons.SyntheticFittingControls.seed"><code class="docutils literal notranslate"><span class="pre">SyntheticFittingControls.seed</span></code></a></li>
-</ul>
-</li>
 <li class="toctree-l3"><a class="reference internal" href="#skeletons.JointMapping"><code class="docutils literal notranslate"><span class="pre">JointMapping</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#skeletons.JointMapping.source_indices"><code class="docutils literal notranslate"><span class="pre">JointMapping.source_indices</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#skeletons.JointMapping.target_indices"><code class="docutils literal notranslate"><span class="pre">JointMapping.target_indices</span></code></a></li>
@@ -559,14 +535,6 @@
 <li class="toctree-l3"><a class="reference internal" href="#skeletons.save_pseudo_label_npz"><code class="docutils literal notranslate"><span class="pre">save_pseudo_label_npz()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#skeletons.save_fitting_prior_checkpoint"><code class="docutils literal notranslate"><span class="pre">save_fitting_prior_checkpoint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#skeletons.train_pseudo_label_priors"><code class="docutils literal notranslate"><span class="pre">train_pseudo_label_priors()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.apply_rom_payload"><code class="docutils literal notranslate"><span class="pre">apply_rom_payload()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.available_animation_presets"><code class="docutils literal notranslate"><span class="pre">available_animation_presets()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.build_fit_export_payload"><code class="docutils literal notranslate"><span class="pre">build_fit_export_payload()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.build_walk_tensors"><code class="docutils literal notranslate"><span class="pre">build_walk_tensors()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.create_synthetic_fitting_dataset"><code class="docutils literal notranslate"><span class="pre">create_synthetic_fitting_dataset()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.default_rom_limits"><code class="docutils literal notranslate"><span class="pre">default_rom_limits()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.normalize_skeleton_name"><code class="docutils literal notranslate"><span class="pre">normalize_skeleton_name()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#skeletons.serialize_rom_limits"><code class="docutils literal notranslate"><span class="pre">serialize_rom_limits()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#skeletons.train_lifter_epoch"><code class="docutils literal notranslate"><span class="pre">train_lifter_epoch()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#skeletons.temporal_smoothness_loss"><code class="docutils literal notranslate"><span class="pre">temporal_smoothness_loss()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#skeletons.joint_position_error"><code class="docutils literal notranslate"><span class="pre">joint_position_error()</span></code></a></li>
@@ -832,7 +800,6 @@
 <li class="toctree-l3"><a class="reference internal" href="metrics.html#skeletons.metrics.mpjpe"><code class="docutils literal notranslate"><span class="pre">mpjpe()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="playground.html">Playground Helpers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="pseudo_labeling.html">Pseudo Labeling</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="pseudo_labeling.html#skeletons.pseudo_labeling.PseudoLabelPriors"><code class="docutils literal notranslate"><span class="pre">PseudoLabelPriors</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="pseudo_labeling.html#skeletons.pseudo_labeling.PseudoLabelPriors.pose_prior"><code class="docutils literal notranslate"><span class="pre">PseudoLabelPriors.pose_prior</span></code></a></li>
@@ -2411,135 +2378,6 @@ optional confidences.</p>
 </dd></dl>
 
 <dl class="py class">
-<dt class="sig sig-object py" id="skeletons.AnimationPreset">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">AnimationPreset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">period</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">matcher</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/animations.html#AnimationPreset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.AnimationPreset" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Procedural animation preset available in the playground.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>key</strong> (<em>str</em>) – Stable preset identifier stored in combo-box user data.</p></li>
-<li><p><strong>label</strong> (<em>str</em>) – Human-readable preset label.</p></li>
-<li><p><strong>period</strong> (<em>float</em>) – Natural loop period in seconds.</p></li>
-<li><p><strong>matcher</strong> (<em>callable</em>) – Predicate deciding whether the preset supports a skeleton model.</p></li>
-<li><p><strong>generator</strong> (<em>callable</em>) – Function producing additive pose and translation tensors.</p></li>
-</ul>
-</dd>
-</dl>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AnimationPreset.key">
-<span class="sig-name descname"><span class="pre">key</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#skeletons.AnimationPreset.key" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AnimationPreset.label">
-<span class="sig-name descname"><span class="pre">label</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#skeletons.AnimationPreset.label" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AnimationPreset.period">
-<span class="sig-name descname"><span class="pre">period</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#skeletons.AnimationPreset.period" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AnimationPreset.matcher">
-<span class="sig-name descname"><span class="pre">matcher</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#skeletons.AnimationPreset.matcher" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AnimationPreset.generator">
-<span class="sig-name descname"><span class="pre">generator</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#skeletons.AnimationPreset.generator" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="skeletons.AxisRomLimit">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">AxisRomLimit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enabled</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minimum_deg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_deg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">180.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/rom.html#AxisRomLimit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.AxisRomLimit" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Per-axis range-of-motion limit used by the playground editor.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>enabled</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether this axis limit should be enforced.</p></li>
-<li><p><strong>minimum_deg</strong> (<em>float</em><em>, </em><em>optional</em>) – Minimum allowed axis-angle value in degrees.</p></li>
-<li><p><strong>maximum_deg</strong> (<em>float</em><em>, </em><em>optional</em>) – Maximum allowed axis-angle value in degrees.</p></li>
-</ul>
-</dd>
-</dl>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AxisRomLimit.enabled">
-<span class="sig-name descname"><span class="pre">enabled</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#skeletons.AxisRomLimit.enabled" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AxisRomLimit.minimum_deg">
-<span class="sig-name descname"><span class="pre">minimum_deg</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">-180.0</span></span><a class="headerlink" href="#skeletons.AxisRomLimit.minimum_deg" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.AxisRomLimit.maximum_deg">
-<span class="sig-name descname"><span class="pre">maximum_deg</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">180.0</span></span><a class="headerlink" href="#skeletons.AxisRomLimit.maximum_deg" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">SyntheticFittingControls</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_frames</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">48</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pose_std</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.18</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_std</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">confidence_dropout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transl_std</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">25.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2500.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">12345</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/fitting_lab.html#SyntheticFittingControls"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.SyntheticFittingControls" title="Link to this definition"></a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Configuration for playground synthetic fitting-data generation.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>num_frames</strong> (<em>int</em>) – Number of independent frames to generate.</p></li>
-<li><p><strong>pose_std</strong> (<em>float</em>) – Standard deviation for random axis-angle pose samples.</p></li>
-<li><p><strong>noise_std</strong> (<em>float</em>) – Pixel-space standard deviation for synthetic 2D detector noise.</p></li>
-<li><p><strong>confidence_dropout</strong> (<em>float</em>) – Probability that a generated per-joint confidence is set to zero.</p></li>
-<li><p><strong>transl_std</strong> (<em>float</em>) – Standard deviation for random translations.</p></li>
-<li><p><strong>depth</strong> (<em>float</em>) – Positive z offset applied to generated translations.</p></li>
-<li><p><strong>seed</strong> (<em>int</em><em> or </em><em>None</em>) – Optional random seed for reproducible playground datasets.</p></li>
-</ul>
-</dd>
-</dl>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls.num_frames">
-<span class="sig-name descname"><span class="pre">num_frames</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">48</span></span><a class="headerlink" href="#skeletons.SyntheticFittingControls.num_frames" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls.pose_std">
-<span class="sig-name descname"><span class="pre">pose_std</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.18</span></span><a class="headerlink" href="#skeletons.SyntheticFittingControls.pose_std" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls.noise_std">
-<span class="sig-name descname"><span class="pre">noise_std</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4.0</span></span><a class="headerlink" href="#skeletons.SyntheticFittingControls.noise_std" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls.confidence_dropout">
-<span class="sig-name descname"><span class="pre">confidence_dropout</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.05</span></span><a class="headerlink" href="#skeletons.SyntheticFittingControls.confidence_dropout" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls.transl_std">
-<span class="sig-name descname"><span class="pre">transl_std</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">25.0</span></span><a class="headerlink" href="#skeletons.SyntheticFittingControls.transl_std" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls.depth">
-<span class="sig-name descname"><span class="pre">depth</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2500.0</span></span><a class="headerlink" href="#skeletons.SyntheticFittingControls.depth" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="skeletons.SyntheticFittingControls.seed">
-<span class="sig-name descname"><span class="pre">seed</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">12345</span></span><a class="headerlink" href="#skeletons.SyntheticFittingControls.seed" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
 <dt class="sig sig-object py" id="skeletons.JointMapping">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">JointMapping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source_indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">joint_names</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/retargeting.html#JointMapping"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.JointMapping" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
@@ -3887,169 +3725,6 @@ skeleton after canonicalization.</p></li>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>ValueError</strong> – If the input tensor shape or scalar options are invalid.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.apply_rom_payload">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">apply_rom_payload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">payload</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">skeleton</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">joint_names</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/rom.html#apply_rom_payload"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.apply_rom_payload" title="Link to this definition"></a></dt>
-<dd><p>Parse a ROM payload for a concrete skeleton.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>payload</strong> (<a class="reference internal" href="retargeting.html#skeletons.retargeting.RetargetedJoints.mapping" title="skeletons.retargeting.RetargetedJoints.mapping"><em>mapping</em></a>) – JSON-decoded ROM payload.</p></li>
-<li><p><strong>skeleton</strong> (<em>str</em>) – Active skeleton name.</p></li>
-<li><p><strong>joint_names</strong> (<em>iterable</em><em> of </em><em>str</em>) – Joints accepted by the active skeleton.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Parsed ROM limit mapping with unknown joints ignored.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict[str, list[<a class="reference internal" href="#skeletons.AxisRomLimit" title="skeletons.AxisRomLimit">AxisRomLimit</a>]]</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>ValueError</strong> – If the payload targets another skeleton or has an invalid schema.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.available_animation_presets">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">available_animation_presets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/animations.html#available_animation_presets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.available_animation_presets" title="Link to this definition"></a></dt>
-<dd><p>Return animation presets compatible with a skeleton model.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model</strong> (<em>object</em>) – Skeleton model exposing <code class="docutils literal notranslate"><span class="pre">joint_names</span></code>.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Presets whose matcher accepts the model.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>list[<a class="reference internal" href="#skeletons.AnimationPreset" title="skeletons.AnimationPreset">AnimationPreset</a>]</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.build_fit_export_payload">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">build_fit_export_payload</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fit_payload</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_indices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">range_sequence</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/fitting_lab.html#build_fit_export_payload"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.build_fit_export_payload" title="Link to this definition"></a></dt>
-<dd><p>Convert a playground sequence-fit result into a stable <code class="docutils literal notranslate"><span class="pre">.npz</span></code> payload.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>fit_payload</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>object</em><em>]</em>) – Result payload produced by the playground fitting worker.</p></li>
-<li><p><strong>frame_indices</strong> (<em>sequence</em><em> of </em><em>int</em><em> or </em><em>tensor</em>) – Absolute frame indices covered by the fitted range.</p></li>
-<li><p><strong>range_sequence</strong> (<a class="reference internal" href="retargeting.html#skeletons.retargeting.RetargetedJoints.mapping" title="skeletons.retargeting.RetargetedJoints.mapping"><em>mapping</em></a><em>, </em><em>optional</em>) – Original target sequence. Known target, confidence, and camera keys are
-copied into the export when present.</p></li>
-<li><p><strong>metadata</strong> (<a class="reference internal" href="retargeting.html#skeletons.retargeting.RetargetedJoints.mapping" title="skeletons.retargeting.RetargetedJoints.mapping"><em>mapping</em></a><em>, </em><em>optional</em>) – JSON-serializable export metadata.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Arrays and JSON scalar fields suitable for <code class="docutils literal notranslate"><span class="pre">numpy.savez_compressed</span></code>.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict[str, numpy.ndarray]</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>ValueError</strong> – If a required fitted result key is missing.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.build_walk_tensors">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">build_walk_tensors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/animations.html#build_walk_tensors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.build_walk_tensors" title="Link to this definition"></a></dt>
-<dd><p>Build the authored walk-cycle pose tensors for a skeleton.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model</strong> (<em>object</em>) – Skeleton model exposing joint metadata and tensor device/dtype.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Body pose, global orientation, and translation tensors.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>tuple[torch.Tensor, torch.Tensor, torch.Tensor]</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.create_synthetic_fitting_dataset">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">create_synthetic_fitting_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">controls</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/fitting_lab.html#create_synthetic_fitting_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.create_synthetic_fitting_dataset" title="Link to this definition"></a></dt>
-<dd><p>Create a synthetic fitting dataset from playground controls.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> (<a class="reference internal" href="#skeletons.SkeletalModel" title="skeletons.SkeletalModel"><em>SkeletalModel</em></a>) – Skeleton model used to generate synthetic joints.</p></li>
-<li><p><strong>controls</strong> (<a class="reference internal" href="#skeletons.SyntheticFittingControls" title="skeletons.SyntheticFittingControls"><em>SyntheticFittingControls</em></a>) – Generation controls collected from the playground UI.</p></li>
-<li><p><strong>device</strong> (<em>torch.device</em><em> or </em><em>str</em><em>, </em><em>optional</em>) – Device used for synthetic generation. Defaults to the model device.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Generated fitting dataset and its source tensors.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="#skeletons.SyntheticFittingDataset" title="skeletons.SyntheticFittingDataset">SyntheticFittingDataset</a></p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>ValueError</strong> – Propagated from <code class="docutils literal notranslate"><span class="pre">generate_synthetic_fitting_dataset</span></code> for invalid
-    controls.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.default_rom_limits">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">default_rom_limits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">joint_names</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/rom.html#default_rom_limits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.default_rom_limits" title="Link to this definition"></a></dt>
-<dd><p>Create disabled ROM limits for every joint.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>joint_names</strong> (<em>iterable</em><em> of </em><em>str</em>) – Joint names that should receive three axis limits.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Mapping from joint name to X/Y/Z axis ROM limits.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict[str, list[<a class="reference internal" href="#skeletons.AxisRomLimit" title="skeletons.AxisRomLimit">AxisRomLimit</a>]]</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.normalize_skeleton_name">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">normalize_skeleton_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/rom.html#normalize_skeleton_name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.normalize_skeleton_name" title="Link to this definition"></a></dt>
-<dd><p>Normalize a skeleton identifier for ROM payload comparisons.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – Skeleton identifier to normalize.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Lowercase identifier with hyphen separators converted to underscores.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>str</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="skeletons.serialize_rom_limits">
-<span class="sig-prename descclassname"><span class="pre">skeletons.</span></span><span class="sig-name descname"><span class="pre">serialize_rom_limits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rom_limits</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">skeleton</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/skeletons/playground/rom.html#serialize_rom_limits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#skeletons.serialize_rom_limits" title="Link to this definition"></a></dt>
-<dd><p>Serialize enabled ROM limits to the playground JSON schema.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>rom_limits</strong> (<a class="reference internal" href="retargeting.html#skeletons.retargeting.RetargetedJoints.mapping" title="skeletons.retargeting.RetargetedJoints.mapping"><em>mapping</em></a>) – Joint-to-axis limit mapping.</p></li>
-<li><p><strong>skeleton</strong> (<em>str</em>) – Skeleton name recorded in the payload.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>JSON-compatible ROM payload.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>dict[str, object]</p>
 </dd>
 </dl>
 </dd></dl>

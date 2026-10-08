@@ -22,19 +22,6 @@ For documentation tooling:
 
    pip install -e .[docs]
 
-For the optional playground GUI:
-
-.. code-block:: bash
-
-   pip install -e .[playground]
-
-If you want everything together:
-
-.. code-block:: bash
-
-   pip install -e .[dev,docs,playground]
-
-
 Building the docs locally
 -------------------------
 
