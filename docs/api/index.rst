@@ -11,7 +11,6 @@ API Reference
    articulation
    lifting
    metrics
-   playground
    pseudo_labeling
    retargeting
    rotations

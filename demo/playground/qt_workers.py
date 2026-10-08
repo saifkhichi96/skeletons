@@ -6,13 +6,13 @@ import numpy as np
 import torch
 from PySide6 import QtCore
 
-from ..fitting import (
+from skeletons.fitting import (
     PerspectiveCamera,
     SkeletalFitter,
     load_fitting_prior_checkpoint,
 )
-from ..rigs import build_layer
-from ..rotations import matrix_to_axis_angle, matrix_to_rot6d
+from skeletons.rigs import build_layer
+from skeletons.rotations import matrix_to_axis_angle, matrix_to_rot6d
 
 
 class FittingWorker(QtCore.QObject):

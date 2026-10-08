@@ -66,23 +66,6 @@ from .metrics import (
     procrustes_aligned_mpjpe,
 )
 from .model import SkeletalModel, SkeletalModelLayer
-from .playground import (
-    ANIMATION_PRESETS,
-    AXIS_FILE_KEYS,
-    AXIS_NAMES,
-    AnimationPreset,
-    AxisRomLimit,
-    FittingExportPayload,
-    SyntheticFittingControls,
-    apply_rom_payload,
-    available_animation_presets,
-    build_fit_export_payload,
-    build_walk_tensors,
-    create_synthetic_fitting_dataset,
-    default_rom_limits,
-    normalize_skeleton_name,
-    serialize_rom_limits,
-)
 from .pseudo_labeling import (
     PseudoLabelPriors,
     PseudoLabelResult,
@@ -211,13 +194,6 @@ __all__ = [
     "TemporalPoseLifter",
     "LifterTrainingState",
     "LiftingEvaluation",
-    "ANIMATION_PRESETS",
-    "AXIS_FILE_KEYS",
-    "AXIS_NAMES",
-    "AnimationPreset",
-    "AxisRomLimit",
-    "FittingExportPayload",
-    "SyntheticFittingControls",
     "JointMapping",
     "RetargetedJoints",
     "RetargetingResult",
@@ -256,14 +232,6 @@ __all__ = [
     "save_pseudo_label_npz",
     "save_fitting_prior_checkpoint",
     "train_pseudo_label_priors",
-    "apply_rom_payload",
-    "available_animation_presets",
-    "build_fit_export_payload",
-    "build_walk_tensors",
-    "create_synthetic_fitting_dataset",
-    "default_rom_limits",
-    "normalize_skeleton_name",
-    "serialize_rom_limits",
     "train_lifter_epoch",
     "temporal_smoothness_loss",
     "joint_position_error",
@@ -326,4 +294,4 @@ __all__ = [
     "estimate_rotations_from_joints",
 ]
 
-__version__ = "1.0.0"
+__version__ = "0.1.0"

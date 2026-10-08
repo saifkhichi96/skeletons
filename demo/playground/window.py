@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6 import QtGui, QtWidgets
 
 from .theme import APP_TITLE, STYLE_SHEET, _light_palette
-from .workbenches import SkeletonWorkbench
+from .workbenches.skeleton_lab import SkeletonWorkbench
 
 
 class DifferentialSkeletonsPlaygroundWindow(QtWidgets.QMainWindow):

@@ -1,10 +1,9 @@
-Skeletons 1.0.0
+Skeletons 0.1.0
 ===============
 
 Skeletons is a differentiable PyTorch library for articulated rigs, forward
 kinematics, inverse kinematics, fitting, and motion analysis. This release
-brings the library, documentation, examples, and interactive playground
-together under a rig-centered API.
+brings the library, documentation, and examples together under a rig-centered API.
 
 Articulated rigs and kinematics
 -------------------------------
@@ -30,17 +29,12 @@ Inverse kinematics, fitting, and motion
   denoising, lifting baselines, hybrid IK, and pseudo-label bootstrapping support
   end-to-end research workflows.
 
-Interactive playground and documentation
------------------------------------------
+Examples and documentation
+--------------------------
 
-- The optional Qt playground combines scene inspection, data loading, motion
-  control, fitting, and manual or dataset-driven IK in one workspace.
-- Dataset-driven IK follows leaf-joint targets through a selected frame range;
-  solved poses can be played back and exported.
 - Runnable examples demonstrate rig articulation, IK solvers, fitting, motion
   analysis, retargeting, training, and simulation export.
 - Sphinx guides cover the public API, core concepts, fitting, training, and
   research workflows.
 
-Install the library with ``pip install skeletons``. Install the interactive
-playground with ``pip install skeletons[playground]``.
+Install the library with ``pip install skeletons``.

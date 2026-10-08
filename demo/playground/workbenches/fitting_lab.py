@@ -7,8 +7,8 @@ from typing import Any, Mapping, Sequence, TypeAlias
 import numpy as np
 import torch
 
-from ..model import SkeletalModel
-from ..synthetic import (
+from skeletons.model import SkeletalModel
+from skeletons.synthetic import (
     SyntheticFittingDataset,
     generate_synthetic_fitting_dataset,
 )

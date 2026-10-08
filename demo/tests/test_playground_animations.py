@@ -4,13 +4,13 @@ import math
 from types import SimpleNamespace
 
 import torch
-
-from skeletons import build_layer
-from skeletons.playground import (
-    AxisRomLimit,
+from playground.animations import (
     available_animation_presets,
     build_walk_tensors,
 )
+from playground.rom import AxisRomLimit
+
+from skeletons import build_layer
 
 
 def _preset_by_key(model, key: str):

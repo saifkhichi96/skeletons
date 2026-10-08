@@ -1,7 +1,5 @@
 # Skeletons
 
-**v1.0.0**
-
 Skeletons is a PyTorch package for articulated skeletons. It gives you differentiable forward kinematics, inverse-kinematics-style initialization, fitting utilities for 2D or 3D keypoints, and trainable skeletal priors without requiring a skinned mesh model.
 
 If you already know `smplx`, the intended feel is similar:
@@ -17,12 +15,6 @@ From a local checkout:
 pip install -e .
 ```
 
-If you want the interactive playground too:
-
-```bash
-pip install -e .[playground]
-```
-
 For development and tests:
 
 ```bash
@@ -33,18 +25,6 @@ For the Sphinx documentation toolchain:
 
 ```bash
 pip install -e .[docs]
-```
-
-For development, tests, and the playground together:
-
-```bash
-pip install -e .[dev,playground]
-```
-
-If you want development tools, docs, and the playground together:
-
-```bash
-pip install -e .[dev,docs,playground]
 ```
 
 ## Typical use cases
@@ -236,19 +216,7 @@ trainer = JointLimitTrainer(model=model)
 
 For end-to-end scripts, use the examples below.
 
-## 8. Use the examples and playground
-
-Install the playground extra first if you have not already:
-
-```bash
-pip install -e .[playground]
-```
-
-Launch the interactive GUI:
-
-```bash
-python scripts/run_playground.py
-```
+## 8. Use the examples
 
 Fit a dataset sample from the command line:
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skeletons"
-version = "1.0.0"
+version = "0.1.0"
 description = "Differentiable skeletal kinematic models for pose, animation, and FK-based learning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,11 +37,6 @@ dev = [
 docs = [
   "Sphinx>=7.2",
   "sphinx-rtd-theme>=2.0",
-]
-playground = [
-  "PyOpenGL>=3.1",
-  "pyqtgraph>=0.13",
-  "PySide6>=6.7"
 ]
 
 [tool.setuptools]

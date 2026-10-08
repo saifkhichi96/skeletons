@@ -50,15 +50,24 @@ Starting fitting pauses playback and IK; manual pose edits pause IK.
 Install the optional GUI dependencies from the project root:
 
 ```bash
-pip install -e '.[playground]'
+pip install -e .
+pip install -r demo/requirements.txt
 ```
 
-Launch with either entry point:
+Launch from the project root:
 
 ```bash
-python -m skeletons.playground_app
-python scripts/run_playground.py
+python demo/run.py
 ```
 
 The View menu also provides camera framing and floor visibility controls
 (shortcuts **F** and **G**).
+
+The GUI and its animation, ROM, synthetic-data controls, export helpers, and Qt
+fitting worker live in this demo; they are separate from the core library.
+
+Run the headless helper tests from the project root:
+
+```bash
+PYTHONPATH=src:demo python -m pytest demo/tests
+```

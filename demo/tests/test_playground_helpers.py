@@ -4,13 +4,13 @@ import json
 
 import numpy as np
 import torch
-
-from skeletons import build_layer
-from skeletons.playground import (
+from playground.workbenches.fitting_lab import (
     SyntheticFittingControls,
     build_fit_export_payload,
     create_synthetic_fitting_dataset,
 )
+
+from skeletons import build_layer
 
 
 def test_create_synthetic_fitting_dataset_uses_controls() -> None:

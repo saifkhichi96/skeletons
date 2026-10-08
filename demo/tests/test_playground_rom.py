@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import pytest
-
-from skeletons.playground import (
+from playground.rom import (
     AxisRomLimit,
     apply_rom_payload,
     default_rom_limits,
