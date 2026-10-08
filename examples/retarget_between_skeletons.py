@@ -10,23 +10,16 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import torch
-from _synthetic import make_random_pose_batch
-from _work_dir import log_status, make_run_name, resolve_work_dir, save_json
 
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import SkeletalFitter
-
-
-def shared_joint_mapping(source_model, target_model) -> list[tuple[int, int, str]]:
-    target_lookup = {
-        name: idx for idx, name in enumerate(target_model.spec.joint_names)
-    }
-    mapping: list[tuple[int, int, str]] = []
-    for src_idx, name in enumerate(source_model.spec.joint_names):
-        dst_idx = target_lookup.get(name)
-        if dst_idx is not None:
-            mapping.append((src_idx, dst_idx, name))
-    return mapping
+from skeletons import build_layer
+from skeletons.artifacts import (
+    log_status,
+    make_run_name,
+    resolve_work_dir,
+    save_json,
+)
+from skeletons.retargeting import build_joint_mapping, retarget_skeleton
+from skeletons.synthetic import generate_random_pose_batch
 
 
 def main() -> int:
@@ -52,50 +45,31 @@ def main() -> int:
 
     source_model = build_layer(args.source).to(device)
     target_model = build_layer(args.target).to(device)
-    mapping = shared_joint_mapping(source_model, target_model)
-    if len(mapping) < 4:
-        raise ValueError(
-            f"Not enough shared joints between {args.source} and {args.target}: {mapping}"
-        )
+    mapping = build_joint_mapping(source_model, target_model, min_joints=4)
 
-    _, _, _, source_joints = make_random_pose_batch(
+    pose_batch = generate_random_pose_batch(
         source_model, batch_size=args.batch_size, pose_std=args.pose_std, device=device
     )
-    target_observations = torch.zeros(
-        args.batch_size, target_model.NUM_JOINTS, 3, device=device
-    )
-    weights = torch.zeros(args.batch_size, target_model.NUM_JOINTS, device=device)
-    for src_idx, dst_idx, _name in mapping:
-        target_observations[:, dst_idx] = source_joints[:, src_idx]
-        weights[:, dst_idx] = 1.0
-
-    fitter = SkeletalFitter(model=target_model, device=device)
-    result = fitter.fit_3d(
-        target_observations,
-        weights=weights,
+    source_joints = pose_batch.joints
+    result = retarget_skeleton(
+        source_joints,
+        source_model=source_model,
+        target_model=target_model,
+        mapping=mapping,
         num_iters=args.fit_iters,
         optimize_scales=True,
         use_pose_prior_latent=False,
     )
 
-    shared_errors = []
-    for src_idx, dst_idx, _name in mapping:
-        shared_errors.append(
-            torch.linalg.vector_norm(
-                result.model_output.joints[:, dst_idx] - source_joints[:, src_idx],
-                dim=-1,
-            )
-        )
-    shared_mpjpe = torch.stack(shared_errors, dim=-1).mean().item()
     metrics = {
-        "shared_joint_mpjpe": shared_mpjpe,
+        "shared_joint_mpjpe": result.shared_joint_mpjpe,
         "shared_joint_count": len(mapping),
-        **result.losses,
+        **result.fitting_result.losses,
     }
     save_json(work_dir / "metrics.json", metrics)
     log_status(
         Path(__file__).stem,
-        f"shared_joint_count={len(mapping)} shared_joint_mpjpe={shared_mpjpe:.4f}",
+        f"shared_joint_count={len(mapping)} shared_joint_mpjpe={result.shared_joint_mpjpe:.4f}",
     )
     return 0
 

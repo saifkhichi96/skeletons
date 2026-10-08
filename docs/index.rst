@@ -1,7 +1,7 @@
-DifferentialSkeletons Documentation
+Skeletons Documentation
 ===================================
 
-DifferentialSkeletons is a PyTorch package for articulated skeletons. It focuses on
+Skeletons is a PyTorch package for articulated skeletons. It focuses on
 forward kinematics, articulated fitting, and skeleton-native priors without requiring
 skinned meshes or SMPL-family assets.
 

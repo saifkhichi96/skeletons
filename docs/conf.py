@@ -11,7 +11,7 @@ sys.path.insert(0, str(SRC))
 with (ROOT / "pyproject.toml").open("rb") as handle:
     pyproject = tomllib.load(handle)
 
-project = "DifferentialSkeletons"
+project = "skeletons"
 author = ", ".join(
     author_entry["name"] for author_entry in pyproject["project"].get("authors", [])
 )

@@ -10,101 +10,26 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import torch
-import torch.nn as nn
-from _work_dir import (
+from torch.utils.data import DataLoader, TensorDataset
+
+from skeletons import (
+    SUPPORTED_SKELETONS,
+    ForwardKinematicsLoss,
+    build_layer,
+)
+from skeletons.artifacts import (
     log_status,
     make_run_name,
     resolve_work_dir,
     save_json,
     write_last_checkpoint,
 )
-from torch.utils.data import DataLoader, TensorDataset
-
-from differential_skeletons import (
-    SUPPORTED_SKELETONS,
-    ForwardKinematicsLoss,
-    SkeletalModel,
-    build_layer,
+from skeletons.lifting import (
+    PoseLifter,
+    evaluate_lifter,
+    train_lifter_epoch,
 )
-
-
-class PoseLifter(nn.Module):
-    def __init__(self, num_joints: int, hidden_dim: int = 256) -> None:
-        super().__init__()
-        input_dim = num_joints * 2
-        output_dim = num_joints * 3
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim),
-        )
-        self.num_joints = num_joints
-
-    def forward(self, keypoints_2d: torch.Tensor) -> torch.Tensor:
-        batch_size = keypoints_2d.shape[0]
-        flat = keypoints_2d.reshape(batch_size, -1)
-        return self.net(flat).reshape(batch_size, self.num_joints, 3)
-
-
-def make_synthetic_dataset(
-    model: SkeletalModel,
-    *,
-    num_samples: int,
-    pose_std: float,
-    noise_std: float,
-    device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    with torch.no_grad():
-        full_pose = (
-            torch.randn(num_samples, model.NUM_JOINTS, 3, device=device) * pose_std
-        )
-        joints_3d = model(full_pose=full_pose).joints.detach()
-
-        keypoints_2d = joints_3d[..., [0, 1]]
-        keypoints_2d = keypoints_2d + noise_std * torch.randn_like(keypoints_2d)
-
-        root_2d = keypoints_2d[:, model.root_index : model.root_index + 1]
-        keypoints_2d = keypoints_2d - root_2d
-
-        scale = (
-            torch.linalg.vector_norm(keypoints_2d, dim=-1)
-            .amax(dim=-1, keepdim=True)
-            .clamp_min(1e-6)
-        )
-        keypoints_2d = keypoints_2d / scale.unsqueeze(-1)
-        return keypoints_2d.cpu(), joints_3d.cpu()
-
-
-def evaluate(
-    lifter: PoseLifter,
-    model: SkeletalModel,
-    loader: DataLoader,
-    fk_loss: ForwardKinematicsLoss,
-    device: torch.device,
-) -> tuple[float, float]:
-    lifter.eval()
-    total_fk = 0.0
-    total_mpjpe = 0.0
-    total_samples = 0
-
-    with torch.no_grad():
-        for keypoints_2d, target_3d in loader:
-            keypoints_2d = keypoints_2d.to(device)
-            target_3d = target_3d.to(device)
-
-            pred_pose = lifter(keypoints_2d)
-            loss = fk_loss(target_3d, full_pose=pred_pose)
-            pred_3d = model(full_pose=pred_pose).joints
-            mpjpe = torch.linalg.vector_norm(pred_3d - target_3d, dim=-1).mean()
-
-            batch_size = keypoints_2d.shape[0]
-            total_fk += loss.item() * batch_size
-            total_mpjpe += mpjpe.item() * batch_size
-            total_samples += batch_size
-
-    return total_fk / total_samples, total_mpjpe / total_samples
+from skeletons.synthetic import generate_orthographic_lifting_dataset
 
 
 def main() -> int:
@@ -174,20 +99,24 @@ def main() -> int:
         script_name,
         f"building synthetic train/val datasets (train={args.train_samples}, val={args.val_samples})",
     )
-    train_2d, train_3d = make_synthetic_dataset(
+    train_dataset = generate_orthographic_lifting_dataset(
         model,
         num_samples=args.train_samples,
         pose_std=args.pose_std,
         noise_std=args.noise_std,
         device=device,
     )
-    val_2d, val_3d = make_synthetic_dataset(
+    val_dataset = generate_orthographic_lifting_dataset(
         model,
         num_samples=args.val_samples,
         pose_std=args.pose_std,
         noise_std=args.noise_std,
         device=device,
     )
+    train_2d = train_dataset.keypoints_2d.cpu()
+    train_3d = train_dataset.joints_3d.cpu()
+    val_2d = val_dataset.keypoints_2d.cpu()
+    val_3d = val_dataset.joints_3d.cpu()
     log_status(script_name, "dataset generation complete")
 
     train_loader = DataLoader(
@@ -207,28 +136,25 @@ def main() -> int:
 
     history: list[dict[str, float | int]] = []
     for epoch in range(1, args.epochs + 1):
-        lifter.train()
-        running_loss = 0.0
-        num_seen = 0
-
-        for keypoints_2d, target_3d in train_loader:
-            keypoints_2d = keypoints_2d.to(device)
-            target_3d = target_3d.to(device)
-
-            optimizer.zero_grad()
-            pred_pose = lifter(keypoints_2d)
-            loss_fk = fk_loss(target_3d, full_pose=pred_pose)
-            loss_reg = args.pose_reg * pred_pose.square().mean()
-            loss = loss_fk + loss_reg
-            loss.backward()
-            optimizer.step()
-
-            batch_size = keypoints_2d.shape[0]
-            running_loss += loss.item() * batch_size
-            num_seen += batch_size
-
-        train_loss = running_loss / num_seen
-        val_fk, val_mpjpe = evaluate(lifter, model, val_loader, fk_loss, device)
+        train_state = train_lifter_epoch(
+            lifter,
+            model,
+            train_loader,
+            optimizer=optimizer,
+            fk_loss=fk_loss,
+            device=device,
+            pose_reg=args.pose_reg,
+        )
+        train_loss = train_state.loss
+        val_state = evaluate_lifter(
+            lifter,
+            model,
+            val_loader,
+            fk_loss=fk_loss,
+            device=device,
+        )
+        val_fk = val_state.fk_loss
+        val_mpjpe = val_state.mpjpe
         history.append(
             {
                 "epoch": epoch,

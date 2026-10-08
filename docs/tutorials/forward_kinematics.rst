@@ -14,7 +14,7 @@ Step 1: build a layer
 .. code-block:: python
 
    import torch
-   from differential_skeletons import build_layer
+   from skeletons import build_layer
 
    model = build_layer("spinetrack")
 
@@ -84,7 +84,7 @@ Step 5: use a parameter-owning model if needed
 
 .. code-block:: python
 
-   from differential_skeletons import create
+   from skeletons import create
 
    stateful = create("spinetrack", batch_size=4)
    output = stateful()

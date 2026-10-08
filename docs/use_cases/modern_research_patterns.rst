@@ -2,7 +2,7 @@ Modern Research Patterns
 ========================
 
 Many recent methods can be read as recurring design patterns rather than as
-single fixed architectures. DifferentialSkeletons can act as the articulated
+single fixed architectures. skeletons can act as the articulated
 layer inside several of those patterns.
 
 Pattern 1: Optimization-based fitting with learned priors
@@ -67,7 +67,7 @@ Pattern 4: Dataset bootstrapping and pseudo-label generation
 A common modern recipe is: fit a structured model to weak supervision, keep the
 high-confidence results, and train a direct regressor from those pseudo-labels.
 
-DifferentialSkeletons supports this pattern directly:
+skeletons supports this pattern directly:
 
 - fit 2D detections with ``SkeletalFitter``
 - save fitted 3D joints or rotations

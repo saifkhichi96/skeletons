@@ -26,21 +26,20 @@ The ``--priors`` argument accepts:
 Apply priors in Python
 ----------------------
 
-The fitting API itself does not load checkpoints for you. Instead, you create
-the prior objects and pass them into ``SkeletalFitter``:
+Use ``load_fitting_prior_checkpoint(...)`` to resolve a checkpoint file, a
+``last_checkpoint`` pointer, or a run directory:
 
 .. code-block:: python
 
-   import torch
-   from differential_skeletons import build_layer
-   from differential_skeletons.fitting import SkeletalFitter
+   from skeletons import build_layer
+   from skeletons.fitting import load_fitting_prior_checkpoint
 
    model = build_layer("spinetrack")
-   fitter = SkeletalFitter(
-       model=model,
-       pose_prior=pose_prior,
-       joint_limit_prior=joint_limit_prior,
+   priors = load_fitting_prior_checkpoint(
+       "work_dirs/train_prior/spinetrack_my_dataset",
+       skeleton=model.spec.name,
    )
+   fitter = priors.make_fitter(model=model)
 
    result = fitter.fit_3d(target_joints, num_iters=200)
 

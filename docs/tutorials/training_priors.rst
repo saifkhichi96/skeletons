@@ -77,7 +77,9 @@ The saved checkpoint includes:
 - ``joint_limit_prior``
 - ``history``
 
-That is exactly what ``examples/fit_demo.py`` expects when you pass ``--priors``.
+Use ``save_fitting_prior_checkpoint(...)`` and
+``load_fitting_prior_checkpoint(...)`` for this schema. ``examples/fit_demo.py``
+uses the same loader when you pass ``--priors``.
 
 
 Training with custom code
@@ -88,12 +90,13 @@ The training script is thin. You can reproduce its core logic directly:
 .. code-block:: python
 
    from torch.utils.data import DataLoader
-   from differential_skeletons import build_layer
-   from differential_skeletons.fitting import (
+   from skeletons import build_layer
+   from skeletons.fitting import (
        FrameDataset,
        JointLimitTrainer,
        PoseVAE,
        PoseVAETrainer,
+       save_fitting_prior_checkpoint,
    )
 
    model = build_layer("spinetrack")
@@ -105,6 +108,13 @@ The training script is thin. You can reproduce its core logic directly:
    pose_prior = PoseVAE(num_joints=model.NUM_BODY_JOINTS, latent_dim=32)
    trainer = PoseVAETrainer(pose_prior, model=model)
    state = trainer.train_epoch(loader)
+   save_fitting_prior_checkpoint(
+       "priors.pth",
+       model=model,
+       pose_prior=pose_prior,
+       joint_limit_prior=joint_limit_prior,
+       history=[{"epoch": 1, "loss": state.loss}],
+   )
 
 
 Training a temporal prior

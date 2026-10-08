@@ -4,95 +4,14 @@ import argparse
 from pathlib import Path
 
 import torch
-from _work_dir import resolve_checkpoint_reference
 
-from differential_skeletons import SUPPORTED_SKELETONS, build_layer
-from differential_skeletons.fitting import (
+from skeletons import SUPPORTED_SKELETONS, build_layer
+from skeletons.fitting import (
     FrameDataset,
-    JointLimitPrior,
-    JointLimitStatistics,
     PerspectiveCamera,
-    PoseVAE,
     SkeletalFitter,
+    load_fitting_prior_checkpoint,
 )
-
-
-def _normalize_skeleton_name(name: str) -> str:
-    return name.lower().replace("-", "_")
-
-
-def _infer_pose_prior_config(state_dict: dict[str, torch.Tensor]) -> dict[str, int]:
-    linear_keys = sorted(
-        key
-        for key, value in state_dict.items()
-        if key.startswith("encoder.") and key.endswith(".weight") and value.ndim == 2
-    )
-    if not linear_keys:
-        raise ValueError("Could not infer PoseVAE architecture from the checkpoint.")
-    input_dim = int(state_dict[linear_keys[0]].shape[1])
-    hidden_dim = int(state_dict[linear_keys[0]].shape[0])
-    latent_dim = int(state_dict["encoder_mu.weight"].shape[0])
-    if input_dim % 6 != 0:
-        raise ValueError(
-            f"PoseVAE input dimension must be divisible by 6, got {input_dim}."
-        )
-    return {
-        "num_joints": input_dim // 6,
-        "latent_dim": latent_dim,
-        "hidden_dim": hidden_dim,
-        "num_hidden_layers": len(linear_keys),
-    }
-
-
-def _load_priors(
-    path: Path,
-    *,
-    skeleton: str,
-) -> tuple[PoseVAE | None, JointLimitPrior | None]:
-    checkpoint_path = resolve_checkpoint_reference(path)
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    if not isinstance(checkpoint, dict):
-        raise ValueError(
-            f"Expected a dict checkpoint in {checkpoint_path}, got {type(checkpoint).__name__}."
-        )
-
-    checkpoint_skeleton = checkpoint.get("skeleton")
-    if checkpoint_skeleton is not None and _normalize_skeleton_name(
-        str(checkpoint_skeleton)
-    ) != _normalize_skeleton_name(skeleton):
-        raise ValueError(
-            f"Prior checkpoint skeleton {checkpoint_skeleton!r} does not match requested skeleton {skeleton!r}.",
-        )
-
-    pose_prior = None
-    pose_state = checkpoint.get("pose_prior")
-    if pose_state is not None:
-        pose_config = checkpoint.get("pose_prior_config")
-        if pose_config is None:
-            pose_config = _infer_pose_prior_config(pose_state)
-        pose_prior = PoseVAE(**pose_config)
-        pose_prior.load_state_dict(pose_state)
-        pose_prior.eval()
-
-    joint_limit_prior = None
-    joint_limit_state = checkpoint.get("joint_limit_prior")
-    if joint_limit_state is not None:
-        joint_limit_config = checkpoint.get("joint_limit_prior_config", {})
-        joint_limit_prior = JointLimitPrior(
-            JointLimitStatistics(
-                mean=joint_limit_state["mean"],
-                std=joint_limit_state["std"],
-                lower=joint_limit_state["lower"],
-                upper=joint_limit_state["upper"],
-            ),
-            barrier_scale=float(joint_limit_config.get("barrier_scale", 10.0)),
-        )
-        joint_limit_prior.load_state_dict(joint_limit_state)
-        joint_limit_prior.eval()
-
-    if pose_prior is None and joint_limit_prior is None:
-        raise ValueError(f"No supported priors were found in {path}.")
-    return pose_prior, joint_limit_prior
 
 
 def main() -> None:
@@ -111,7 +30,26 @@ def main() -> None:
         help="Skeleton layout used by the dataset arrays.",
     )
     parser.add_argument("--mode", choices=("2d", "3d"), default="3d")
-    parser.add_argument("--sample-index", type=int, default=0)
+    parser.add_argument(
+        "--frame-index",
+        "--sample-index",
+        type=int,
+        default=0,
+        dest="frame_index",
+        help="Starting frame index in the dataset.",
+    )
+    parser.add_argument(
+        "--seq-length",
+        type=int,
+        default=1,
+        help="Number of consecutive frames to fit. If > 1, uses warm-start from previous frame.",
+    )
+    parser.add_argument(
+        "--fit-iters",
+        type=int,
+        default=None,
+        help="Override optimizer iterations for smoke tests or quick demos.",
+    )
     parser.add_argument(
         "--priors",
         type=Path,
@@ -122,42 +60,117 @@ def main() -> None:
 
     model = build_layer(args.skeleton)
     dataset = FrameDataset.from_npz(args.dataset, expected_num_joints=model.NUM_JOINTS)
-    sample = dataset[args.sample_index]
-    pose_prior = None
-    joint_limit_prior = None
+
     if args.priors is not None:
-        pose_prior, joint_limit_prior = _load_priors(
-            args.priors, skeleton=model.spec.name
-        )
-    fitter = SkeletalFitter(
-        model=model,
-        pose_prior=pose_prior,
-        joint_limit_prior=joint_limit_prior,
+        priors = load_fitting_prior_checkpoint(args.priors, skeleton=model.spec.name)
+        fitter = priors.make_fitter(model=model)
+    else:
+        fitter = SkeletalFitter(model=model)
+
+    # Fit a sequence of frames with warm-start from previous frame.
+    start_idx = args.frame_index
+    seq_length = args.seq_length
+    num_iters_per_frame = (
+        (200 if args.mode == "3d" else 300)
+        if args.fit_iters is None
+        else args.fit_iters
     )
 
-    if args.mode == "3d":
-        result = fitter.fit_3d(sample["joints_3d"].unsqueeze(0), num_iters=200)
-        print({"skeleton": model.spec.name, **result.losses})
-        print(result.model_output.joints.shape)
-        return
+    # Load the sequence
+    frames = [
+        dataset[start_idx + i] for i in range(min(seq_length, len(dataset) - start_idx))
+    ]
+    print(
+        f"Fitting {len(frames)} frame(s) for {model.spec.name} "
+        f"starting from index {start_idx}."
+    )
 
-    if "joints_2d" not in sample:
-        raise ValueError("The dataset file does not contain joints_2d.")
-    camera = PerspectiveCamera(
-        fx=sample.get("fx", torch.tensor(1000.0)).reshape(()),
-        fy=sample.get("fy", torch.tensor(1000.0)).reshape(()),
-        cx=sample.get("cx", torch.tensor(512.0)).reshape(()),
-        cy=sample.get("cy", torch.tensor(512.0)).reshape(()),
-    )
-    confidences = sample.get("confidences")
-    result = fitter.fit_2d(
-        sample["joints_2d"].unsqueeze(0),
-        camera,
-        confidences=None if confidences is None else confidences.unsqueeze(0),
-        num_iters=300,
-    )
-    print({"skeleton": model.spec.name, **result.losses})
-    print(result.model_output.joints.shape)
+    init_global_orient = None
+    init_body_pose = None
+    init_scales = None
+    init_transl = None
+
+    for frame_idx, sample in enumerate(frames):
+        abs_frame_idx = start_idx + frame_idx
+        print(f"\n--- Frame {abs_frame_idx} ({frame_idx + 1}/{len(frames)}) ---")
+
+        if args.mode == "3d":
+            result = fitter.fit_3d(
+                sample["joints_3d"].unsqueeze(0),
+                num_iters=num_iters_per_frame,
+                init_global_orient=init_global_orient,
+                init_body_pose=init_body_pose,
+                init_scales=init_scales,
+                init_transl=init_transl,
+            )
+            print(f"Losses: {result.losses}")
+
+            # Extract fitted parameters for warm-start of next frame.
+            with torch.no_grad():
+                from skeletons.rotations import matrix_to_rot6d
+
+                init_global_orient = matrix_to_rot6d(
+                    result.model_output.local_rotations[..., model.root_index, :, :]
+                )
+                init_body_pose = matrix_to_rot6d(
+                    result.model_output.local_rotations[
+                        ..., list(model.non_root_joint_indices), :, :
+                    ]
+                )
+                # Use fitted scales if available, otherwise let fitter re-estimate.
+                init_scales = (
+                    result.model_output.scales.detach()
+                    if result.model_output.scales is not None
+                    else None
+                )
+                init_transl = result.model_output.joints[
+                    ..., model.root_index, :
+                ].detach()
+        else:
+            if "joints_2d" not in sample:
+                raise ValueError("The dataset file does not contain joints_2d.")
+            camera = PerspectiveCamera(
+                fx=sample.get("fx", torch.tensor(1000.0)).reshape(()),
+                fy=sample.get("fy", torch.tensor(1000.0)).reshape(()),
+                cx=sample.get("cx", torch.tensor(512.0)).reshape(()),
+                cy=sample.get("cy", torch.tensor(512.0)).reshape(()),
+            )
+            confidences = sample.get("confidences")
+            result = fitter.fit_2d(
+                sample["joints_2d"].unsqueeze(0),
+                camera,
+                confidences=None if confidences is None else confidences.unsqueeze(0),
+                num_iters=num_iters_per_frame,
+                init_global_orient=init_global_orient,
+                init_body_pose=init_body_pose,
+                init_scales=init_scales,
+                init_transl=init_transl,
+            )
+            print(f"Losses: {result.losses}")
+
+            # Extract fitted parameters for warm-start of next frame.
+            with torch.no_grad():
+                from skeletons.rotations import matrix_to_rot6d
+
+                init_global_orient = matrix_to_rot6d(
+                    result.model_output.local_rotations[..., model.root_index, :, :]
+                )
+                init_body_pose = matrix_to_rot6d(
+                    result.model_output.local_rotations[
+                        ..., list(model.non_root_joint_indices), :, :
+                    ]
+                )
+                # Use fitted scales if available, otherwise let fitter re-estimate.
+                init_scales = (
+                    result.model_output.scales.detach()
+                    if result.model_output.scales is not None
+                    else None
+                )
+                init_transl = result.model_output.joints[
+                    ..., model.root_index, :
+                ].detach()
+
+    print(f"\nFitting complete. Final result shape: {result.model_output.joints.shape}")
 
 
 if __name__ == "__main__":

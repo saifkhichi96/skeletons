@@ -13,8 +13,8 @@ Minimal fitting example
 .. code-block:: python
 
    import torch
-   from differential_skeletons import build_layer
-   from differential_skeletons.fitting import SkeletalFitter
+   from skeletons import build_layer
+   from skeletons.fitting import SkeletalFitter
 
    model = build_layer("human36m")
    target = torch.randn(1, model.NUM_JOINTS, 3)
@@ -67,8 +67,8 @@ Fitting a dataset sample
 
 .. code-block:: python
 
-   from differential_skeletons import build_layer
-   from differential_skeletons.fitting import FrameDataset, SkeletalFitter
+   from skeletons import build_layer
+   from skeletons.fitting import FrameDataset, SkeletalFitter
 
    model = build_layer("spinetrack")
    dataset = FrameDataset.from_npz("dataset.npz", expected_num_joints=model.NUM_JOINTS)

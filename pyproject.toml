@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "DifferentialSkeletons"
+name = "skeletons"
 version = "1.0.0"
 description = "Differentiable skeletal kinematic models for pose, animation, and FK-based learning"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
-  {name = "DifferentialSkeletons Contributors"}
+  {name = "Skeletons Contributors"}
 ]
 keywords = ["kinematics", "pose-estimation", "forward-kinematics", "skeleton", "pytorch"]
 classifiers = [

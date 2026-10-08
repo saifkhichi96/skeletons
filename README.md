@@ -1,8 +1,8 @@
-# DifferentialSkeletons
+# Skeletons
 
 **v1.0.0**
 
-DifferentialSkeletons is a PyTorch package for articulated skeletons. It gives you differentiable forward kinematics, inverse-kinematics-style initialization, fitting utilities for 2D or 3D keypoints, and trainable skeletal priors without requiring a skinned mesh model.
+Skeletons is a PyTorch package for articulated skeletons. It gives you differentiable forward kinematics, inverse-kinematics-style initialization, fitting utilities for 2D or 3D keypoints, and trainable skeletal priors without requiring a skinned mesh model.
 
 If you already know `smplx`, the intended feel is similar:
 
@@ -59,7 +59,7 @@ pip install -e .[dev,docs,playground]
 
 ## Documentation
 
-User documentation lives under [`docs/`](/workspace/projects/skelix/docs) and is
+User documentation lives under [`docs/`](docs) and is
 structured as a Sphinx site for Read the Docs.
 
 Build it locally with:
@@ -79,7 +79,7 @@ make -C docs html
 The simplest entry point is `build_layer()`:
 
 ```python
-from differential_skeletons import build_layer
+from skeletons import build_layer
 
 model = build_layer("human36m")
 print(model.spec.name)   # human36m
@@ -104,7 +104,7 @@ You can also use concrete classes from the package root, for example `Human36MMo
 
 ```python
 import torch
-from differential_skeletons import build_layer
+from skeletons import build_layer
 
 model = build_layer("human36m")
 
@@ -135,7 +135,7 @@ Useful options:
 `build_layer()` is usually the right choice for fitting and inference. If you want a module with registered parameters, use a concrete `*Model` class or `create()`:
 
 ```python
-from differential_skeletons import create
+from skeletons import create
 
 model = create("human36m", batch_size=2)
 print(model.global_orient.shape)  # [2, 3]
@@ -151,8 +151,8 @@ Created parameters always keep the leading batch dimension, including `batch_siz
 
 ```python
 import torch
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import SkeletalFitter
+from skeletons import build_layer
+from skeletons.fitting import SkeletalFitter
 
 model = build_layer("human36m")
 target_joints_3d = torch.randn(1, model.NUM_JOINTS, 3)
@@ -170,8 +170,8 @@ If you want the fitter to adapt scales as well, pass `optimize_scales=True`.
 
 ```python
 import torch
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import PerspectiveCamera, SkeletalFitter
+from skeletons import build_layer
+from skeletons.fitting import PerspectiveCamera, SkeletalFitter
 
 model = build_layer("human36m")
 target_joints_2d = torch.randn(1, model.NUM_JOINTS, 2)
@@ -193,8 +193,8 @@ print(result.losses)
 Frame-wise data:
 
 ```python
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import FrameDataset, SkeletalFitter
+from skeletons import build_layer
+from skeletons.fitting import FrameDataset, SkeletalFitter
 
 model = build_layer("human36m")
 dataset = FrameDataset.from_npz("sample.npz", expected_num_joints=model.NUM_JOINTS)
@@ -226,8 +226,8 @@ The fitting package includes a pose VAE, joint-limit prior tools, and training h
 Small example:
 
 ```python
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import JointLimitTrainer, PoseVAE
+from skeletons import build_layer
+from skeletons.fitting import JointLimitTrainer, PoseVAE
 
 model = build_layer("human36m")
 vae = PoseVAE(num_joints=model.NUM_BODY_JOINTS, latent_dim=32)
@@ -247,7 +247,7 @@ pip install -e .[playground]
 Launch the interactive GUI:
 
 ```bash
-python playground.py
+python scripts/run_playground.py
 ```
 
 Fit a dataset sample from the command line:
@@ -295,3 +295,5 @@ The `examples/` directory now includes extended, runnable examples for:
 - cross-skeleton retargeting between public layouts
 - pseudo-label bootstrapping from 2D detections
 - spine-specific sequence fitting
+- skeletal marker/contact FK, DLS IK, and CCD IK
+- URDF/MJCF export

@@ -10,80 +10,24 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import torch
-import torch.nn as nn
-from _synthetic import make_perspective_camera, make_random_walk_sequences
-from _work_dir import log_status, make_run_name, resolve_work_dir, save_json
 from torch.utils.data import DataLoader, TensorDataset
 
-from differential_skeletons import ForwardKinematicsLoss, build_layer
-
-
-class TemporalPoseLifter(nn.Module):
-    """A small temporal lifting baseline inspired by VideoPose3D/PoseFormer-style sequence models."""
-
-    def __init__(
-        self, num_joints: int, hidden_dim: int = 256, kernel_size: int = 3
-    ) -> None:
-        super().__init__()
-        input_dim = num_joints * 2
-        output_dim = num_joints * 3
-        padding = kernel_size // 2
-        self.encoder = nn.Sequential(
-            nn.Conv1d(input_dim, hidden_dim, kernel_size=kernel_size, padding=padding),
-            nn.ReLU(),
-            nn.Conv1d(
-                hidden_dim,
-                hidden_dim,
-                kernel_size=kernel_size,
-                padding=padding,
-                dilation=2,
-            ),
-            nn.ReLU(),
-            nn.Conv1d(
-                hidden_dim,
-                hidden_dim,
-                kernel_size=kernel_size,
-                padding=2 * padding,
-                dilation=2,
-            ),
-            nn.ReLU(),
-            nn.Conv1d(hidden_dim, output_dim, kernel_size=1),
-        )
-        self.num_joints = num_joints
-
-    def forward(self, keypoints_2d: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, _, _ = keypoints_2d.shape
-        x = keypoints_2d.reshape(batch_size, seq_len, -1).transpose(1, 2)
-        y = self.encoder(x).transpose(1, 2)
-        return y.reshape(batch_size, seq_len, self.num_joints, 3)
-
-
-def evaluate(
-    lifter: TemporalPoseLifter,
-    model,
-    loader: DataLoader,
-    fk_loss: ForwardKinematicsLoss,
-    device: torch.device,
-) -> tuple[float, float]:
-    lifter.eval()
-    total_fk = 0.0
-    total_mpjpe = 0.0
-    total_frames = 0
-    with torch.no_grad():
-        for keypoints_2d, joints_3d in loader:
-            keypoints_2d = keypoints_2d.to(device)
-            joints_3d = joints_3d.to(device)
-            pred_pose = lifter(keypoints_2d)
-            flat_pose = pred_pose.reshape(-1, model.NUM_JOINTS, 3)
-            flat_joints = joints_3d.reshape(-1, model.NUM_JOINTS, 3)
-            loss = fk_loss(flat_joints, full_pose=flat_pose)
-            pred_joints = model(full_pose=flat_pose).joints.reshape_as(joints_3d)
-            mpjpe = torch.linalg.vector_norm(pred_joints - joints_3d, dim=-1).mean()
-            frames = keypoints_2d.shape[0] * keypoints_2d.shape[1]
-            total_fk += float(loss) * frames
-            total_mpjpe += float(mpjpe) * frames
-            total_frames += frames
-    return total_fk / total_frames, total_mpjpe / total_frames
+from skeletons import ForwardKinematicsLoss, build_layer
+from skeletons.artifacts import (
+    log_status,
+    make_run_name,
+    resolve_work_dir,
+    save_json,
+)
+from skeletons.lifting import (
+    TemporalPoseLifter,
+    evaluate_lifter,
+    train_lifter_epoch,
+)
+from skeletons.synthetic import (
+    generate_random_walk_sequences,
+    make_perspective_camera,
+)
 
 
 def main() -> int:
@@ -121,7 +65,7 @@ def main() -> int:
     fk_loss = ForwardKinematicsLoss(model)
     camera = make_perspective_camera(device)
 
-    _, _, _, train_3d = make_random_walk_sequences(
+    train_batch = generate_random_walk_sequences(
         model,
         batch_size=args.train_sequences,
         seq_len=args.seq_len,
@@ -130,7 +74,7 @@ def main() -> int:
         depth=2500.0,
         device=device,
     )
-    _, _, _, val_3d = make_random_walk_sequences(
+    val_batch = generate_random_walk_sequences(
         model,
         batch_size=args.val_sequences,
         seq_len=args.seq_len,
@@ -139,6 +83,8 @@ def main() -> int:
         depth=2500.0,
         device=device,
     )
+    train_3d = train_batch.joints
+    val_3d = val_batch.joints
     train_2d = camera.project(train_3d) + args.noise_std * torch.randn_like(
         train_3d[..., :2]
     )
@@ -160,25 +106,24 @@ def main() -> int:
 
     history: list[dict[str, float | int]] = []
     for epoch in range(1, args.epochs + 1):
-        lifter.train()
-        running = 0.0
-        seen = 0
-        for keypoints_2d, joints_3d in train_loader:
-            keypoints_2d = keypoints_2d.to(device)
-            joints_3d = joints_3d.to(device)
-            optimizer.zero_grad(set_to_none=True)
-            pred_pose = lifter(keypoints_2d)
-            loss = fk_loss(
-                joints_3d.reshape(-1, model.NUM_JOINTS, 3),
-                full_pose=pred_pose.reshape(-1, model.NUM_JOINTS, 3),
-            )
-            loss.backward()
-            optimizer.step()
-            running += float(loss) * keypoints_2d.shape[0]
-            seen += keypoints_2d.shape[0]
-
-        train_loss = running / max(1, seen)
-        val_fk, val_mpjpe = evaluate(lifter, model, val_loader, fk_loss, device)
+        train_state = train_lifter_epoch(
+            lifter,
+            model,
+            train_loader,
+            optimizer=optimizer,
+            fk_loss=fk_loss,
+            device=device,
+        )
+        train_loss = train_state.loss
+        val_state = evaluate_lifter(
+            lifter,
+            model,
+            val_loader,
+            fk_loss=fk_loss,
+            device=device,
+        )
+        val_fk = val_state.fk_loss
+        val_mpjpe = val_state.mpjpe
         log_status(
             Path(__file__).stem,
             f"epoch={epoch} train_fk={train_loss:.4f} val_fk={val_fk:.4f} val_mpjpe={val_mpjpe:.4f}",

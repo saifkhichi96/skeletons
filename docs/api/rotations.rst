@@ -1,6 +1,6 @@
 Rotation Utilities
 ==================
 
-.. automodule:: differential_skeletons.rotations
+.. automodule:: skeletons.rotations
    :members:
    :show-inheritance:

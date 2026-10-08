@@ -14,8 +14,8 @@ Perspective-camera fitting
 .. code-block:: python
 
    import torch
-   from differential_skeletons import build_layer
-   from differential_skeletons.fitting import PerspectiveCamera, SkeletalFitter
+   from skeletons import build_layer
+   from skeletons.fitting import PerspectiveCamera, SkeletalFitter
 
    model = build_layer("human36m")
    target_2d = torch.randn(1, model.NUM_JOINTS, 2)

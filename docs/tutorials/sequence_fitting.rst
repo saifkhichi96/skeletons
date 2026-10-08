@@ -30,8 +30,8 @@ Minimal 3D sequence example
 .. code-block:: python
 
    import torch
-   from differential_skeletons import build_layer
-   from differential_skeletons.fitting import MotionSmoothnessPrior, SkeletalFitter
+   from skeletons import build_layer
+   from skeletons.fitting import MotionSmoothnessPrior, SkeletalFitter
 
    model = build_layer("spinetrack")
    target = torch.randn(2, 60, model.NUM_JOINTS, 3)
@@ -69,7 +69,7 @@ Use ``SequenceDataset.from_npz(...)`` when your file stores arrays shaped like
 
 .. code-block:: python
 
-   from differential_skeletons.fitting import SequenceDataset
+   from skeletons.fitting import SequenceDataset
 
    dataset = SequenceDataset.from_npz(
        "clips.npz",

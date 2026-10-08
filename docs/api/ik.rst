@@ -1,6 +1,6 @@
 Inverse Kinematics Helpers
 ==========================
 
-.. automodule:: differential_skeletons.ik
+.. automodule:: skeletons.ik
    :members:
    :show-inheritance:

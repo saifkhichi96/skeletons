@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from differential_skeletons import (
+from skeletons import (
     CocoModel,
     CocoWholeBodyModel,
     Face68Model,

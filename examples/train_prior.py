@@ -3,22 +3,22 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import torch
-from _work_dir import (
+from torch.utils.data import DataLoader
+
+from skeletons import SUPPORTED_SKELETONS, build_layer
+from skeletons.artifacts import (
     log_status,
     make_run_name,
     resolve_work_dir,
     save_json,
     write_last_checkpoint,
 )
-from torch.utils.data import DataLoader
-
-from differential_skeletons import SUPPORTED_SKELETONS, build_layer
-from differential_skeletons.fitting import (
+from skeletons.fitting import (
     FrameDataset,
     JointLimitTrainer,
     PoseVAE,
     PoseVAETrainer,
+    save_fitting_prior_checkpoint,
 )
 
 
@@ -116,24 +116,14 @@ def main() -> None:
             f"kl={epoch_metrics['kl']:.6f}",
         )
 
-    checkpoint = {
-        "format_version": 1,
-        "skeleton": model.spec.name,
-        "pose_prior_config": {
-            "num_joints": model.NUM_JOINTS - 1,
-            "latent_dim": args.latent_dim,
-            "hidden_dim": args.hidden_dim,
-            "num_hidden_layers": args.num_hidden_layers,
-        },
-        "pose_prior": vae.state_dict(),
-        "joint_limit_prior_config": {
-            "barrier_scale": joint_limit_prior.barrier_scale,
-        },
-        "joint_limit_prior": joint_limit_prior.state_dict(),
-        "history": history,
-    }
     checkpoint_path = work_dir / f"epoch_{args.epochs}.pth"
-    torch.save(checkpoint, checkpoint_path)
+    save_fitting_prior_checkpoint(
+        checkpoint_path,
+        model=model,
+        pose_prior=vae,
+        joint_limit_prior=joint_limit_prior,
+        history=history,
+    )
     write_last_checkpoint(work_dir, checkpoint_path)
     save_json(
         work_dir / "metrics.json",

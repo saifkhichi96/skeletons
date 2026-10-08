@@ -21,3 +21,7 @@ A learned temporal prior and an explicit smoothness prior are complementary:
 
 - the temporal prior captures dataset-like motion transitions
 - the smoothness prior penalizes frame-to-frame jitter and acceleration spikes
+
+Use ``train_temporal_prior(...)`` for the learned temporal model and
+``denoise_joint_sequences(...)`` for the reusable fitting path behind the
+example script.

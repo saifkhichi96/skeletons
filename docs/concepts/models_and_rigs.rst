@@ -1,7 +1,7 @@
 Models and Rigs
 ===============
 
-What a rig is in DifferentialSkeletons
+Skeletal rigs
 --------------------------------------
 
 Each supported skeleton is defined as a rig: a named articulated tree with:
@@ -11,62 +11,7 @@ Each supported skeleton is defined as a rig: a named articulated tree with:
 - canonical rest offsets
 - a single root joint
 
-The package ships several ready-made rigs, including ``human36m``, ``coco``,
-``mpii``, ``hand21``, ``face68``, ``halpe_fullbody``, ``coco_wholebody``, and
-``spinetrack``.
-
-You normally access them through:
-
-- ``build_layer(name)`` for a stateless layer
-- ``create(name, ...)`` for a parameter-owning model
-- ``get_spec(name)`` if you want the underlying ``SkeletonSpec``
-
-
-``SkeletalModel`` vs ``SkeletalModelLayer``
--------------------------------------------
-
-The package mirrors the rough interaction style of ``smplx``:
-
-``SkeletalModel``
-   Owns registered parameters such as ``global_orient``, ``body_pose``,
-   ``scales``, and ``transl`` when those are created during construction.
-
-``SkeletalModelLayer``
-   Disables those registered parameters by default and expects values to be
-   provided explicitly during each forward call.
-
-In practice:
-
-- use ``build_layer(...)`` or ``*ModelLayer`` classes for fitting and inference
-- use ``create(...)`` or ``*Model`` classes when you want the module itself to
-  own learnable state
-
-
-Batch semantics
----------------
-
-Created parameters always keep a leading batch dimension, even when
-``batch_size=1``. For example:
-
-.. code-block:: python
-
-   from differential_skeletons import create
-
-   model = create("human36m", batch_size=2)
-   print(model.global_orient.shape)  # [2, 3]
-   print(model.body_pose.shape)      # [2, J - 1, 3]
-   print(model.scales.shape)         # [2, J, 3]
-   print(model.transl.shape)         # [2, 3]
-
-This makes the package easier to use in batched optimization and keeps behavior
-close to mesh-model libraries that always allocate batched default parameters.
-
-
-Articulated structure
----------------------
-
-Internally, a model is represented as an articulated tree rather than a flat
-parent index list alone. The public model object exposes:
+A skeletal rig is internally represented as a ``SkeletonSpec`` object with the following attributes:
 
 - ``joint_names``
 - ``parents``
@@ -77,21 +22,60 @@ parent index list alone. The public model object exposes:
 - ``root_index``
 
 The root is treated as a free body, and non-root links are articulated relative
-to their parent.
+to their parent. Use ``get_spec(name)`` to retrieve the underlying ``SkeletonSpec`` for a rig.
 
+Supported skeletons
+~~~~~~~~~~~~~~~~~~~
 
-When to use the factory API
----------------------------
+Use ``list_supported_skeletons()`` to see all built-in skeletons. This includes
+``human36m``, ``coco``, ``mpii``, ``halpe26``, ``hand21``, ``face68``,
+``halpe_fullbody``, ``coco_wholebody``, and ``spinetrack``.
 
-The recommended public surface is the factory API rather than importing a rig
-module directly:
+Differentiable models
+-------------------------------------------
+
+Two main classes mirroring `smplx`_ semantics represent the rigs as differentiable models:
+
+.. _smplx: https://github.com/vchoutas/smplx
+
+``SkeletalModel``
+   Owns registered parameters such as ``global_orient``, ``body_pose``,
+   ``scales``, and ``transl`` when those are created during construction.
+
+``SkeletalModelLayer``
+   Disables those registered parameters by default and expects values to be
+   provided explicitly during each forward call.
+
+Use the following factory functions to construct models and layers:
 
 .. code-block:: python
 
-   from differential_skeletons import build_layer, create
+   from skeletons import build_layer, create
 
-   layer = build_layer("spinetrack")
-   model = create("spinetrack", batch_size=8)
+   layer = build_layer("spinetrack")            # for a stateless layer
+   model = create("spinetrack", batch_size=8)   # for a parameter-owning model
 
-This keeps code independent of internal rig module organization and is the best
-choice for user code, scripts, and notebooks.
+In practice, use:
+
+- ``build_layer(...)`` for fitting and inference
+- ``create(...)`` when you want the module itself to own learnable state
+
+
+Batch semantics
+---------------
+
+Created parameters always keep a leading batch dimension, even when
+``batch_size=1``. For example:
+
+.. code-block:: python
+
+   from skeletons import create
+
+   model = create("human36m", batch_size=2)
+   print(model.global_orient.shape)  # [2, 3]
+   print(model.body_pose.shape)      # [2, J - 1, 3]
+   print(model.scales.shape)         # [2, J, 3]
+   print(model.transl.shape)         # [2, 3]
+
+This makes the package easier to use in batched optimization and keeps behavior
+close to mesh-model libraries that always allocate batched default parameters.

@@ -4,13 +4,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from differential_skeletons import (
+from skeletons import (
     SkeletalModelLayer,
     build_layer,
     matrix_to_rot6d,
     rot6d_to_matrix,
 )
-from differential_skeletons.fitting import (
+from skeletons.fitting import (
     FrameDataset,
     JointLimitPrior,
     PerspectiveCamera,
@@ -18,9 +18,10 @@ from differential_skeletons.fitting import (
     PoseVAETrainer,
     SequenceDataset,
     SkeletalFitter,
+    WeakPerspectiveCamera,
     prepare_frame_batch,
 )
-from differential_skeletons.ik import estimate_rotations_from_joints
+from skeletons.ik import estimate_rotations_from_joints
 
 
 def _make_synthetic_batch(
@@ -65,6 +66,74 @@ def test_joint_limit_prior_fit() -> None:
     prior = JointLimitPrior.fit(rot6d_to_matrix(prepared.body_pose_rot6d))
     loss = prior(rot6d_to_matrix(prepared.body_pose_rot6d))
     assert torch.isfinite(loss)
+
+
+def test_joint_limit_prior_gradients_with_pose_vae_latent() -> None:
+    """Ensure joint-limit prior produces finite gradients when used with VAE latent optimization.
+    
+    This is a regression test for the issue where axis-angle conversion produced
+    unstable derivatives causing NaN gradients during latent optimization.
+    """
+    model, joints, _, body_pose, transl = _make_synthetic_batch(batch_size=2)
+    centered = joints - transl[:, None, :]
+    prepared = prepare_frame_batch(centered, model=model)
+    
+    # Fit joint-limit prior on the synthetic data
+    local_rotations = rot6d_to_matrix(prepared.body_pose_rot6d)
+    prior = JointLimitPrior.fit(local_rotations)
+    
+    # Create a simple pose VAE
+    pose_vae = PoseVAE(
+        num_joints=model.NUM_JOINTS - 1,
+        latent_dim=8,
+        hidden_dim=64,
+        num_hidden_layers=1,
+    )
+    pose_vae.eval()
+    
+    # Encode the body pose to latent space and optimize latent with joint-limit loss
+    with torch.no_grad():
+        mu, _ = pose_vae.encode(prepared.body_pose_rot6d)
+    
+    latent = torch.nn.Parameter(mu.clone())
+    optimizer = torch.optim.Adam([latent], lr=1e-3)
+    
+    # One optimization step to check for NaN/inf in gradients
+    for _ in range(1):
+        optimizer.zero_grad()
+        
+        # Decode latent to body pose
+        decoded = pose_vae.decode(latent)
+        
+        # Run model forward
+        output = model(
+            global_orient=prepared.global_orient_rot6d,
+            body_pose=decoded,
+            scales=torch.ones_like(prepared.scales),
+            transl=torch.zeros(prepared.scales.shape[0], 3),
+            pose_repr="rot6d",
+            return_local_rotations=True,
+        )
+        
+        # Compute joint-limit loss
+        body_local_rot = output.local_rotations[..., list(model.non_root_joint_indices), :, :]
+        loss = prior(body_local_rot)
+        
+        # Check that loss is finite
+        assert torch.isfinite(loss), f"Joint-limit loss is not finite: {loss}"
+        
+        # Backward pass should not produce NaN gradients
+        loss.backward()
+        
+        assert latent.grad is not None
+        assert torch.isfinite(latent.grad).all(), (
+            f"Latent gradients contain NaN/inf: nan={torch.isnan(latent.grad).any()}, "
+            f"inf={torch.isinf(latent.grad).any()}"
+        )
+        
+        # Optimizer step should work
+        optimizer.step()
+        assert torch.isfinite(latent).all()
 
 
 def test_pose_vae_training_step() -> None:
@@ -117,6 +186,35 @@ def test_2d_fitter_runs() -> None:
         use_pose_prior_latent=False,
     )
     assert result.model_output.joints.shape == joints.shape
+
+
+def test_camera_projection_broadcasts_per_frame_intrinsics() -> None:
+    points = torch.tensor(
+        [
+            [[1.0, 2.0, 10.0], [3.0, 4.0, 10.0]],
+            [[2.0, 1.0, 20.0], [4.0, 2.0, 20.0]],
+        ]
+    )
+    camera = PerspectiveCamera(
+        fx=torch.tensor([1000.0, 2000.0]),
+        fy=torch.tensor([500.0, 1000.0]),
+        cx=torch.tensor([10.0, 20.0]),
+        cy=torch.tensor([30.0, 40.0]),
+    )
+    weak_camera = WeakPerspectiveCamera(
+        scale=torch.tensor([2.0, 3.0]),
+        tx=torch.tensor([10.0, 20.0]),
+        ty=torch.tensor([30.0, 40.0]),
+    )
+
+    projected = camera.project(points)
+    weak_projected = weak_camera.project(points)
+
+    assert projected.shape == (2, 2, 2)
+    assert torch.allclose(projected[0, 0], torch.tensor([110.0, 130.0]))
+    assert torch.allclose(projected[1, 0], torch.tensor([220.0, 90.0]))
+    assert torch.allclose(weak_projected[0, 0], torch.tensor([12.0, 34.0]))
+    assert torch.allclose(weak_projected[1, 0], torch.tensor([26.0, 43.0]))
 
 
 def test_default_fitter_uses_parameter_free_model() -> None:
@@ -190,6 +288,26 @@ def test_frame_dataset_from_npz_accepts_alias_keys(tmp_path) -> None:
     assert "frame_index" in dataset.metadata
 
 
+def test_frame_dataset_accepts_scalar_camera_constants() -> None:
+    model = build_layer("human36m")
+    joints_3d = torch.zeros(2, model.NUM_JOINTS, 3)
+    dataset = FrameDataset(
+        joints_3d,
+        cameras={
+            "fx": torch.tensor(1000.0),
+            "fy": torch.tensor(900.0),
+            "cx": torch.tensor(512.0),
+            "cy": torch.tensor(384.0),
+        },
+        expected_num_joints=model.NUM_JOINTS,
+    )
+    sample = dataset[1]
+
+    assert sample["fx"].shape == ()
+    assert sample["fx"].item() == 1000.0
+    assert sample["cy"].item() == 384.0
+
+
 def test_sequence_dataset_from_npz_accepts_alias_keys(tmp_path) -> None:
     model = build_layer("human36m")
     num_sequences = 2
@@ -234,3 +352,21 @@ def test_sequence_dataset_from_npz_accepts_alias_keys(tmp_path) -> None:
         "camera_rotation",
     }
     assert "sequence_index" in dataset.metadata
+
+
+def test_sequence_dataset_accepts_scalar_camera_constants() -> None:
+    model = build_layer("human36m")
+    joints_3d = torch.zeros(2, 3, model.NUM_JOINTS, 3)
+    dataset = SequenceDataset(
+        joints_3d,
+        cameras={
+            "fx": torch.tensor(1200.0),
+            "fy": torch.tensor(1180.0),
+        },
+        expected_num_joints=model.NUM_JOINTS,
+    )
+    sample = dataset[0]
+
+    assert sample["fx"].shape == ()
+    assert sample["fx"].item() == 1200.0
+    assert sample["fy"].item() == 1180.0

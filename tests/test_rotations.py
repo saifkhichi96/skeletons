@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from differential_skeletons.rotations import (
+from skeletons.rotations import (
     axis_angle_to_matrix,
     matrix_to_rot6d,
     quaternion_to_matrix,

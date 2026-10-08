@@ -16,7 +16,7 @@ Supported pose representations are:
 - ``rot6d``
 - ``rotmat``
 
-The helper functions in :mod:`differential_skeletons.rotations` convert between
+The helper functions in :mod:`skeletons.rotations` convert between
 these formats.
 
 

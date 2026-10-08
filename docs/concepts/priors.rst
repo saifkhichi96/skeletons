@@ -4,7 +4,7 @@ Priors
 What a prior means here
 -----------------------
 
-In DifferentialSkeletons, a prior is a regularizer or learned model over
+In Skeletons, a prior is a regularizer or learned model over
 skeleton pose rather than over mesh shape or texture.
 
 Priors are especially useful because 2D and sparse 3D keypoints usually do not
@@ -68,8 +68,8 @@ into its constructor:
 
 .. code-block:: python
 
-   from differential_skeletons import build_layer
-   from differential_skeletons.fitting import SkeletalFitter
+   from skeletons import build_layer
+   from skeletons.fitting import SkeletalFitter
 
    model = build_layer("spinetrack")
    fitter = SkeletalFitter(

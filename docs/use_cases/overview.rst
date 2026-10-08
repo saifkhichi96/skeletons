@@ -1,7 +1,7 @@
 Overview: Where a Skeleton-First Library Fits
 =============================================
 
-DifferentialSkeletons sits between raw keypoints and full mesh models.
+skeletons sits between raw keypoints and full mesh models.
 That makes it useful in a surprisingly wide range of pipelines.
 
 Core categories
@@ -87,7 +87,7 @@ Examples:
 What the package does *not* try to be
 -------------------------------------
 
-DifferentialSkeletons is not a replacement for every mesh model. It does not
+skeletons is not a replacement for every mesh model. It does not
 model skinning, self-contact geometry, silhouettes, or surface-based losses.
 Its strength is the opposite: it gives you a light, transparent, rig-native
 layer for applications where joint-space structure matters more than surface

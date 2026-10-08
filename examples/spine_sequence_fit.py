@@ -10,11 +10,23 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import torch
-from _synthetic import make_random_walk_sequences, make_weak_perspective_camera
-from _work_dir import log_status, make_run_name, resolve_work_dir, save_json
 
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import MotionSmoothnessPrior, SkeletalFitter
+from skeletons import (
+    build_layer,
+    fit_2d_joint_sequences,
+    mean_per_joint_position_error,
+)
+from skeletons.artifacts import (
+    log_status,
+    make_run_name,
+    resolve_work_dir,
+    save_json,
+)
+from skeletons.fitting import MotionSmoothnessPrior
+from skeletons.synthetic import (
+    generate_random_walk_sequences,
+    make_weak_perspective_camera,
+)
 
 
 def main() -> int:
@@ -38,7 +50,7 @@ def main() -> int:
 
     model = build_layer("spinetrack").to(device)
     camera = make_weak_perspective_camera(device)
-    _, _, _, clean_joints = make_random_walk_sequences(
+    sequence = generate_random_walk_sequences(
         model,
         batch_size=1,
         seq_len=args.seq_len,
@@ -47,31 +59,35 @@ def main() -> int:
         depth=1200.0,
         device=device,
     )
+    clean_joints = sequence.joints
     target_2d = camera.project(clean_joints) + args.noise_std * torch.randn_like(
         clean_joints[..., :2]
     )
     confidences = torch.ones(1, args.seq_len, model.NUM_JOINTS, device=device)
 
-    fitter = SkeletalFitter(
+    result = fit_2d_joint_sequences(
+        target_2d,
+        camera,
         model=model,
+        confidences=confidences,
         smoothness_prior=MotionSmoothnessPrior(
             velocity_weight=1.0, acceleration_weight=4.0
         ),
-        device=device,
-    )
-    result = fitter.fit_sequence_2d(
-        target_2d,
-        camera,
-        confidences=confidences,
         num_iters=args.fit_iters,
         optimize_scales=False,
         use_pose_prior_latent=False,
+        device=device,
     )
-    fitted = result.model_output.joints.reshape_as(clean_joints)
-    mpjpe = torch.linalg.vector_norm(fitted - clean_joints, dim=-1).mean().item()
-    metrics = {"mpjpe": mpjpe, **result.losses}
+    fitted = result.joints_3d.to(device)
+    mpjpe = mean_per_joint_position_error(fitted, clean_joints)
+    mpjpe_value = float(mpjpe.item())
+    metrics = {
+        "mpjpe": mpjpe_value,
+        "mean_reprojection": result.mean_reprojection_error,
+        **result.losses,
+    }
     save_json(work_dir / "metrics.json", metrics)
-    log_status(Path(__file__).stem, f"mpjpe={mpjpe:.4f}")
+    log_status(Path(__file__).stem, f"mpjpe={mpjpe_value:.4f}")
     return 0
 
 

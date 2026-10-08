@@ -9,19 +9,23 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-import numpy as np
 import torch
-from _synthetic import make_perspective_camera, make_random_pose_batch
-from _work_dir import log_status, make_run_name, resolve_work_dir, save_json
-from torch.utils.data import DataLoader
 
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import (
-    FrameDataset,
-    JointLimitTrainer,
-    PoseVAE,
-    PoseVAETrainer,
-    SkeletalFitter,
+from skeletons import build_layer, mean_per_joint_position_error
+from skeletons.artifacts import (
+    log_status,
+    make_run_name,
+    resolve_work_dir,
+    save_json,
+)
+from skeletons.pseudo_labeling import (
+    fit_2d_pseudo_labels,
+    save_pseudo_label_npz,
+    train_pseudo_label_priors,
+)
+from skeletons.synthetic import (
+    generate_random_pose_batch,
+    make_perspective_camera,
 )
 
 
@@ -49,65 +53,53 @@ def main() -> int:
 
     model = build_layer(args.skeleton).to(device)
     camera = make_perspective_camera(device)
-    _, _, _, joints_3d = make_random_pose_batch(
+    pose_batch = generate_random_pose_batch(
         model, batch_size=args.num_samples, pose_std=args.pose_std, device=device
     )
+    joints_3d = pose_batch.joints
     joints_2d = camera.project(joints_3d)
     noisy_2d = joints_2d + args.noise_std * torch.randn_like(joints_2d)
     confidences = torch.ones(args.num_samples, model.NUM_JOINTS, device=device)
     confidences[torch.rand_like(confidences) < 0.15] = 0.0
 
-    dataset = FrameDataset(
-        joints_3d.cpu(),
-        joints_2d=noisy_2d.cpu(),
-        confidences=confidences.cpu(),
-        expected_num_joints=model.NUM_JOINTS,
-    )
-    loader = DataLoader(dataset, batch_size=32, shuffle=True)
-    joint_limit_prior = JointLimitTrainer(model=model).fit_from_loader(loader)
-    pose_prior = PoseVAE(num_joints=model.NUM_JOINTS - 1, latent_dim=16, hidden_dim=256)
-    pose_trainer = PoseVAETrainer(pose_prior, model=model, device=device)
-    for epoch in range(1, args.prior_epochs + 1):
-        state = pose_trainer.train_epoch(loader)
-        log_status(Path(__file__).stem, f"prior epoch={epoch} loss={state.loss:.5f}")
-
-    fitter = SkeletalFitter(
+    priors = train_pseudo_label_priors(
+        joints_3d,
         model=model,
-        pose_prior=pose_prior,
-        joint_limit_prior=joint_limit_prior,
+        batch_size=32,
+        epochs=args.prior_epochs,
+        latent_dim=16,
+        hidden_dim=256,
         device=device,
     )
-    pseudo_labels = []
-    reprojection_errors = []
-    for index in range(args.num_samples):
-        result = fitter.fit_2d(
-            noisy_2d[index : index + 1],
-            camera,
-            confidences=confidences[index : index + 1],
-            num_iters=args.fit_iters,
-            optimize_scales=True,
-            use_pose_prior_latent=True,
+    for state in priors.history:
+        log_status(
+            Path(__file__).stem,
+            f"prior epoch={state.epoch} loss={state.loss:.5f}",
         )
-        pseudo_labels.append(result.model_output.joints[0].detach().cpu())
-        reprojection_errors.append(float(result.losses.get("reprojection", 0.0)))
 
-    pseudo_joints_3d = torch.stack(pseudo_labels, dim=0)
-    pseudo_path = work_dir / "pseudo_labels.npz"
-    np.savez_compressed(
-        pseudo_path,
-        joints_2d=noisy_2d.cpu().numpy(),
-        confidences=confidences.cpu().numpy(),
-        joints_3d=pseudo_joints_3d.numpy(),
+    result = fit_2d_pseudo_labels(
+        noisy_2d,
+        camera,
+        model=model,
+        confidences=confidences,
+        pose_prior=priors.pose_prior,
+        joint_limit_prior=priors.joint_limit_prior,
+        batch_size=1,
+        num_iters=args.fit_iters,
+        optimize_scales=True,
+        use_pose_prior_latent=True,
+        device=device,
     )
+    pseudo_path = work_dir / "pseudo_labels.npz"
+    save_pseudo_label_npz(pseudo_path, result)
 
-    pseudo_mpjpe = (
-        torch.linalg.vector_norm(pseudo_joints_3d.to(device) - joints_3d, dim=-1)
-        .mean()
-        .item()
+    pseudo_mpjpe = mean_per_joint_position_error(
+        result.joints_3d.to(device),
+        joints_3d,
     )
     metrics = {
-        "pseudo_mpjpe": pseudo_mpjpe,
-        "mean_reprojection": float(sum(reprojection_errors) / len(reprojection_errors)),
+        "pseudo_mpjpe": float(pseudo_mpjpe.item()),
+        "mean_reprojection": result.mean_reprojection_error,
         "output": str(pseudo_path),
     }
     save_json(work_dir / "metrics.json", metrics)

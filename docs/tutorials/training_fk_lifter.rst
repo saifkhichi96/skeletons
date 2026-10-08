@@ -56,7 +56,7 @@ Why this matters
 ----------------
 
 Even if you do not plan to use this exact script, it shows a core design goal of
-DifferentialSkeletons:
+Skeletons:
 
 - articulated skeletons are first-class differentiable modules
 - kinematics can be embedded inside learning systems

@@ -1,4 +1,4 @@
-from differential_skeletons import create
+from skeletons import create
 
 model = create("spinetrack")
 

@@ -1,35 +1,46 @@
-Release Notes: v1.0.0
-=====================
+Skeletons 1.0.0
+===============
 
-This release turns the project from an exploratory package into a public-facing
-library with a documented application surface.
+Skeletons is a differentiable PyTorch library for articulated rigs, forward
+kinematics, inverse kinematics, fitting, and motion analysis. This release
+brings the library, documentation, examples, and interactive playground
+together under a rig-centered API.
 
-Highlights
-----------
+Articulated rigs and kinematics
+-------------------------------
 
-- generic articulated body and fitting abstractions
-- multiple public rig conventions under a common API
-- reusable fitting priors and training helpers
-- stateful ``*Model`` and stateless ``*ModelLayer`` variants
-- shared dataset loaders for frame and sequence fitting data
-- richer public examples showing modern research patterns
-- Sphinx documentation expanded beyond API coverage into application guidance
+- Nine built-in rig layouts cover body, hand, face, whole-body, and spine
+  landmarks, with canonical names and alias resolution.
+- Rig metadata supports joint types, axes and limits, links, markers, contacts,
+  named frames, and configurable rest geometry.
+- Batched forward kinematics exposes joint and named-frame positions,
+  rotations, Jacobians, link centers of mass, and global rig properties.
+- URDF and MJCF exporters describe supported rig joints and geometry.
 
-New showcase examples
----------------------
+Inverse kinematics, fitting, and motion
+---------------------------------------
 
-- ``examples/temporal_lifting_videopose3d.py``
-- ``examples/hybrik_style_hybrid_ik.py``
-- ``examples/sequence_denoising_and_smoothing.py``
-- ``examples/retarget_between_skeletons.py``
-- ``examples/pseudo_label_bootstrap.py``
-- ``examples/spine_sequence_fit.py``
+- Generic CCD, damped least-squares, and gradient-based IK work with rig joints
+  and named frames.
+- Robust keypoint, joint-limit, center-of-mass, foot-sliding, and temporal
+  smoothness losses support structured pose and motion objectives.
+- Frame and sequence fitting handle 2D or 3D observations, camera parameters,
+  confidence weights, learned priors, and sequential warm starts.
+- Synthetic datasets, evaluation metrics, cross-rig retargeting, temporal
+  denoising, lifting baselines, hybrid IK, and pseudo-label bootstrapping support
+  end-to-end research workflows.
 
-What this release emphasizes
-----------------------------
+Interactive playground and documentation
+-----------------------------------------
 
-The library is intentionally positioned as a skeleton-first alternative for
-problems where articulated structure matters but a mesh is unnecessary or
-undesirable. That includes research code, fitting pipelines, structural losses,
-retargeting, pseudo-label generation, and domain-specific articulated systems
-such as spine motion.
+- The optional Qt playground combines scene inspection, data loading, motion
+  control, fitting, and manual or dataset-driven IK in one workspace.
+- Dataset-driven IK follows leaf-joint targets through a selected frame range;
+  solved poses can be played back and exported.
+- Runnable examples demonstrate rig articulation, IK solvers, fitting, motion
+  analysis, retargeting, training, and simulation export.
+- Sphinx guides cover the public API, core concepts, fitting, training, and
+  research workflows.
+
+Install the library with ``pip install skeletons``. Install the interactive
+playground with ``pip install skeletons[playground]``.

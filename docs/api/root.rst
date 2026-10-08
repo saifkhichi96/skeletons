@@ -1,6 +1,6 @@
 Top-Level Package
 =================
 
-.. automodule:: differential_skeletons
+.. automodule:: skeletons
    :members:
    :show-inheritance:

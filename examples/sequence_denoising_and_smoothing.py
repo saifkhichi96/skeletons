@@ -10,18 +10,21 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import torch
-from _synthetic import make_random_walk_sequences
-from _work_dir import log_status, make_run_name, resolve_work_dir, save_json
-from torch.utils.data import DataLoader
 
-from differential_skeletons import build_layer
-from differential_skeletons.fitting import (
-    MotionSmoothnessPrior,
-    SequenceDataset,
-    SkeletalFitter,
-    TemporalPrior,
-    TemporalPriorTrainer,
+from skeletons import (
+    build_layer,
+    denoise_joint_sequences,
+    mean_per_joint_position_error,
+    train_temporal_prior,
 )
+from skeletons.artifacts import (
+    log_status,
+    make_run_name,
+    resolve_work_dir,
+    save_json,
+)
+from skeletons.fitting import MotionSmoothnessPrior
+from skeletons.synthetic import generate_random_walk_sequences
 
 
 def main() -> int:
@@ -52,7 +55,7 @@ def main() -> int:
     )
 
     model = build_layer(args.skeleton).to(device)
-    _, _, _, train_joints = make_random_walk_sequences(
+    train_batch = generate_random_walk_sequences(
         model,
         batch_size=args.train_sequences,
         seq_len=args.seq_len,
@@ -61,7 +64,7 @@ def main() -> int:
         depth=2500.0,
         device=device,
     )
-    _, _, _, clean_eval = make_random_walk_sequences(
+    eval_batch = generate_random_walk_sequences(
         model,
         batch_size=args.eval_sequences,
         seq_len=args.seq_len,
@@ -70,50 +73,58 @@ def main() -> int:
         depth=2500.0,
         device=device,
     )
+    train_joints = train_batch.joints
+    clean_eval = eval_batch.joints
     noisy_eval = clean_eval + args.noise_std * torch.randn_like(clean_eval)
 
-    temporal_prior = TemporalPrior(pose_dim=(model.NUM_JOINTS - 1) * 6, hidden_dim=256)
-    trainer = TemporalPriorTrainer(temporal_prior, model=model, device=device)
-    loader = DataLoader(
-        SequenceDataset(train_joints.cpu()), batch_size=16, shuffle=True
+    temporal_training = train_temporal_prior(
+        train_joints,
+        model=model,
+        batch_size=16,
+        epochs=args.prior_epochs,
+        hidden_dim=256,
+        device=device,
     )
-    for epoch in range(1, args.prior_epochs + 1):
-        state = trainer.train_epoch(loader)
+    for state in temporal_training.history:
         log_status(
-            Path(__file__).stem, f"temporal prior epoch={epoch} loss={state.loss:.5f}"
+            Path(__file__).stem,
+            f"temporal prior epoch={state.epoch} loss={state.loss:.5f}",
         )
 
-    fitter = SkeletalFitter(
+    result = denoise_joint_sequences(
+        noisy_eval,
         model=model,
-        temporal_prior=temporal_prior,
+        temporal_prior=temporal_training.temporal_prior,
         smoothness_prior=MotionSmoothnessPrior(
             velocity_weight=1.0, acceleration_weight=2.0
         ),
-        device=device,
-    )
-    result = fitter.fit_sequence_3d(
-        noisy_eval,
         num_iters=args.fit_iters,
         optimize_scales=False,
         use_pose_prior_latent=False,
+        device=device,
     )
-    denoised = result.model_output.joints.reshape_as(clean_eval)
+    denoised = result.joints_3d.to(device)
 
-    noisy_mpjpe = (
-        torch.linalg.vector_norm(noisy_eval - clean_eval, dim=-1).mean().item()
+    noisy_mpjpe = mean_per_joint_position_error(
+        noisy_eval,
+        clean_eval,
     )
-    denoised_mpjpe = (
-        torch.linalg.vector_norm(denoised - clean_eval, dim=-1).mean().item()
+    denoised_mpjpe = mean_per_joint_position_error(
+        denoised,
+        clean_eval,
     )
+    noisy_mpjpe_value = float(noisy_mpjpe.item())
+    denoised_mpjpe_value = float(denoised_mpjpe.item())
     metrics = {
-        "noisy_mpjpe": noisy_mpjpe,
-        "denoised_mpjpe": denoised_mpjpe,
+        "noisy_mpjpe": noisy_mpjpe_value,
+        "denoised_mpjpe": denoised_mpjpe_value,
         **result.losses,
     }
     save_json(work_dir / "metrics.json", metrics)
     log_status(
         Path(__file__).stem,
-        f"noisy_mpjpe={noisy_mpjpe:.4f} denoised_mpjpe={denoised_mpjpe:.4f}",
+        f"noisy_mpjpe={noisy_mpjpe_value:.4f} "
+        f"denoised_mpjpe={denoised_mpjpe_value:.4f}",
     )
     return 0
 

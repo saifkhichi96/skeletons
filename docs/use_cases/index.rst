@@ -2,7 +2,7 @@ Use Cases and Design Patterns
 =============================
 
 This section is intentionally broader than the core tutorials. It maps
-DifferentialSkeletons onto the kinds of pipelines that appear in modern
+skeletons onto the kinds of pipelines that appear in modern
 pose, motion, animation, and fitting research.
 
 .. toctree::
